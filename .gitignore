@@ -30,3 +30,6 @@ bin
 # Project
 precomp_data
 test-results
+gradle.properties
+gradle/wrapper/gradle-wrapper.properties
+
