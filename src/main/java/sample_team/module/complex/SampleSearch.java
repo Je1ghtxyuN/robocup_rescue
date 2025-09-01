@@ -27,23 +27,56 @@ import rescuecore2.standard.entities.Building;
 import rescuecore2.standard.entities.StandardEntity;
 import rescuecore2.standard.entities.StandardEntityURN;
 import rescuecore2.worldmodel.EntityID;
+import rescuecore2.worldmodel.ChangeSet;
+import java.util.Comparator;
+import java.util.Map;
+import java.util.HashMap;
 
 public class SampleSearch extends Search {
 
   private PathPlanning pathPlanning;
   private Clustering clustering;
 
+  // 新增优先级因子计算器
+  private interface PriorityCalculator {
+    double calculatePriority(Building building, AgentInfo agentInfo);
+  }
+
   private EntityID result;
   private Collection<EntityID> unsearchedBuildingIDs;
   private Logger logger;
 
-  public SampleSearch(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager, DevelopData developData) {
+  // 新增私有成员变量
+  private final Map<EntityID, Double> buildingPriorities = new HashMap<>();
+  private final Set<EntityID> searchedBuildings = new HashSet<>();
+  private long lastClusterUpdate = -1;
+  private PriorityCalculator priorityCalculator;
+
+  public SampleSearch(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager,
+      DevelopData developData) {
     super(ai, wi, si, moduleManager, developData);
+
     logger = DefaultLogger.getLogger(agentInfo.me());
     this.unsearchedBuildingIDs = new HashSet<>();
 
+    // 增加初始化优先级计算器（根据智能体类型）
     StandardEntityURN agentURN = ai.me().getStandardURN();
     if (agentURN == AMBULANCE_TEAM) {
+      if (agentURN == AMBULANCE_TEAM) {
+        priorityCalculator = (building, info) -> {
+          // 根据伤员数量、伤势程度、时间因素计算优先级
+          return building.getTotalVictims() * 5.0
+              + building.getFieryness() * 0.2;
+        };
+      } else if (agentURN == FIRE_BRIGADE) {
+        priorityCalculator = (building, info) -> {
+          // 根据火势强度、建筑价值、蔓延风险计算
+          return building.getFieryness() * 10.0
+              + (building.isImportant() ? 50 : 0);
+        };
+      } else {
+        priorityCalculator = (building, info) -> building.isGasLeaking() ? 100 : 1; // 警察优先处理燃气泄漏
+      }
       this.pathPlanning = moduleManager.getModule(
           "SampleSearch.PathPlanning.Ambulance",
           "adf.impl.module.algorithm.DijkstraPathPlanning");
@@ -68,62 +101,94 @@ public class SampleSearch extends Search {
     registerModule(this.pathPlanning);
   }
 
-
+  // 修改集群更新
   @Override
   public Search updateInfo(MessageManager messageManager) {
-    logger.debug("Time:" + agentInfo.getTime());
     super.updateInfo(messageManager);
+    long currentTime = agentInfo.getTime();
 
-    this.unsearchedBuildingIDs
-        .removeAll(this.worldInfo.getChanged().getChangedEntities());
-    if (this.unsearchedBuildingIDs.isEmpty()) {
-      this.reset();
-      this.unsearchedBuildingIDs
-          .removeAll(this.worldInfo.getChanged().getChangedEntities());
+    // 动态更新集群（每100步更新一次）
+    if (currentTime - lastClusterUpdate > 100) {
+      clustering.calc(); // 重新计算集群划分
+      lastClusterUpdate = currentTime;
+    }
+
+    // 移除已变化建筑
+    ChangeSet changed = worldInfo.getChanged();
+    unsearchedBuildingIDs.removeAll(changed.getChangedEntities());
+
+    // 将到达的建筑标记为已搜索
+    if (result != null) {
+      StandardEntity entity = worldInfo.getEntity(result);
+      if (entity instanceof Building) {
+        searchedBuildings.add(result);
+      }
     }
     return this;
   }
 
-
+  // 修改计算函数
   @Override
   public Search calc() {
     this.result = null;
-    if (unsearchedBuildingIDs.isEmpty())
-      return this;
-
-    logger.debug("unsearchedBuildingIDs: " + unsearchedBuildingIDs);
-    this.pathPlanning.setFrom(this.agentInfo.getPosition());
-    this.pathPlanning.setDestination(this.unsearchedBuildingIDs);
-    List<EntityID> path = this.pathPlanning.calc().getResult();
-    logger.debug("best path is: " + path);
-    if (path != null && path.size() > 2) {
-      this.result = path.get(path.size() - 3);
-    } else if (path != null && path.size() > 0) {
-      this.result = path.get(path.size() - 1);
+    if (unsearchedBuildingIDs.isEmpty()) {
+      reset();
+      if (unsearchedBuildingIDs.isEmpty())
+        return this; // 无可用目标
     }
-    logger.debug("chose: " + result);
+
+    // 获取智能体当前位置
+    EntityID currentPosition = agentInfo.getPosition();
+
+    // 按优先级和距离综合排序建筑
+    List<EntityID> sortedBuildings = unsearchedBuildingIDs.stream()
+        .sorted(Comparator.<EntityID>comparingDouble(id -> -buildingPriorities.get(id)) // 降序排列
+            .thenComparingDouble(id -> worldInfo.getDistance(currentPosition, id)) // 距离升序
+        )
+        .collect(Collectors.toList());
+
+    // 选择最佳目标建筑
+    EntityID bestBuilding = sortedBuildings.get(0);
+
+    // 规划到建筑的路径
+    pathPlanning.setFrom(currentPosition);
+    pathPlanning.setDestination(bestBuilding);
+    List<EntityID> path = pathPlanning.calc().getResult();
+
+    // 安全路径检查（选择建筑入口点）
+    if (path != null && !path.isEmpty()) {
+      this.result = bestBuilding; // 直接以建筑为目标
+
+      // 特殊状况：当路径终点不是建筑时
+      if (!worldInfo.getEntity(result).equals(worldInfo.getEntity(path.get(path.size() - 1)))) {
+        result = path.get(path.size() - 1); // 使用路径终点
+      }
+    }
     return this;
   }
 
-
+  // 修改重置方法
   private void reset() {
-    this.unsearchedBuildingIDs.clear();
-    int clusterIndex = this.clustering.getClusterIndex(this.agentInfo.getID());
-    Collection<StandardEntity> clusterEntities = this.clustering
-        .getClusterEntities(clusterIndex);
-    if (clusterEntities != null && clusterEntities.size() > 0) {
-      for (StandardEntity entity : clusterEntities) {
-        if (entity instanceof Building && entity.getStandardURN() != REFUGE) {
-          this.unsearchedBuildingIDs.add(entity.getID());
-        }
+    // 清除现有数据
+    unsearchedBuildingIDs.clear();
+    buildingPriorities.clear();
+
+    int clusterIndex = clustering.getClusterIndex(agentInfo.getID());
+    Collection<StandardEntity> clusterEntities = clustering.getClusterEntities(clusterIndex);
+
+    // 收集并优先级排序
+    for (StandardEntity entity : clusterEntities) {
+      if (entity instanceof Building &&
+          entity.getStandardURN() != REFUGE &&
+          !searchedBuildings.contains(entity.getID())) {
+
+        Building building = (Building) entity;
+        double priority = priorityCalculator.calculatePriority(building, agentInfo);
+        unsearchedBuildingIDs.add(building.getID());
+        buildingPriorities.put(building.getID(), priority);
       }
-    } else {
-      this.unsearchedBuildingIDs
-          .addAll(this.worldInfo.getEntityIDsOfType(BUILDING, GAS_STATION,
-              AMBULANCE_CENTRE, FIRE_STATION, POLICE_OFFICE));
     }
   }
-
 
   @Override
   public EntityID getTarget() {
