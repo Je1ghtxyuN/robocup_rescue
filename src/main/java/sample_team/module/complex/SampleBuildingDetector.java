@@ -27,7 +27,7 @@ public class SampleBuildingDetector extends BuildingDetector {
 
   private EntityID result;
   private Clustering clustering;
-  private PathPlanning pathPlanning; 
+  private PathPlanning pathPlanning;
   private Logger logger;
   private long lastClusterUpdate = -1;
   private List<Building> lastTargets = new ArrayList<>();
