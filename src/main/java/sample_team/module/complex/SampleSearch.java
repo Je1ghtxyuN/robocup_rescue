@@ -37,7 +37,8 @@ public class SampleSearch extends Search {
   private Collection<EntityID> unsearchedBuildingIDs;
   private Logger logger;
 
-  public SampleSearch(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager, DevelopData developData) {
+  public SampleSearch(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager,
+      DevelopData developData) {
     super(ai, wi, si, moduleManager, developData);
     logger = DefaultLogger.getLogger(agentInfo.me());
     this.unsearchedBuildingIDs = new HashSet<>();
@@ -68,7 +69,6 @@ public class SampleSearch extends Search {
     registerModule(this.pathPlanning);
   }
 
-
   @Override
   public Search updateInfo(MessageManager messageManager) {
     logger.debug("Time:" + agentInfo.getTime());
@@ -83,7 +83,6 @@ public class SampleSearch extends Search {
     }
     return this;
   }
-
 
   @Override
   public Search calc() {
@@ -105,7 +104,6 @@ public class SampleSearch extends Search {
     return this;
   }
 
-
   private void reset() {
     this.unsearchedBuildingIDs.clear();
     int clusterIndex = this.clustering.getClusterIndex(this.agentInfo.getID());
@@ -123,7 +121,6 @@ public class SampleSearch extends Search {
               AMBULANCE_CENTRE, FIRE_STATION, POLICE_OFFICE));
     }
   }
-
 
   @Override
   public EntityID getTarget() {

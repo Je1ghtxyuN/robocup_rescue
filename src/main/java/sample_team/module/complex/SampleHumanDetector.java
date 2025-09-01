@@ -31,7 +31,8 @@ public class SampleHumanDetector extends HumanDetector {
 
   private Logger logger;
 
-  public SampleHumanDetector(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager, DevelopData developData) {
+  public SampleHumanDetector(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager,
+      DevelopData developData) {
     super(ai, wi, si, moduleManager, developData);
     logger = DefaultLogger.getLogger(agentInfo.me());
     this.clustering = moduleManager.getModule("SampleHumanDetector.Clustering",
@@ -39,14 +40,12 @@ public class SampleHumanDetector extends HumanDetector {
     registerModule(this.clustering);
   }
 
-
   @Override
   public HumanDetector updateInfo(MessageManager messageManager) {
     logger.debug("Time:" + agentInfo.getTime());
     super.updateInfo(messageManager);
     return this;
   }
-
 
   @Override
   public HumanDetector calc() {
@@ -69,7 +68,6 @@ public class SampleHumanDetector extends HumanDetector {
     return this;
   }
 
-
   private EntityID calcTarget() {
     List<Human> rescueTargets = filterRescueTargets(
         this.worldInfo.getEntitiesOfType(CIVILIAN));
@@ -89,15 +87,12 @@ public class SampleHumanDetector extends HumanDetector {
     return null;
   }
 
-
   @Override
   public EntityID getTarget() {
     return this.result;
   }
 
-
-  private List<Human>
-      filterRescueTargets(Collection<? extends StandardEntity> list) {
+  private List<Human> filterRescueTargets(Collection<? extends StandardEntity> list) {
     List<Human> rescueTargets = new ArrayList<>();
     for (StandardEntity next : list) {
       if (!(next instanceof Human))
@@ -112,9 +107,7 @@ public class SampleHumanDetector extends HumanDetector {
     return rescueTargets;
   }
 
-
-  private List<Human>
-      filterInCluster(Collection<? extends StandardEntity> entities) {
+  private List<Human> filterInCluster(Collection<? extends StandardEntity> entities) {
     int clusterIndex = clustering.getClusterIndex(this.agentInfo.getID());
     List<Human> filter = new ArrayList<>();
     HashSet<StandardEntity> inCluster = new HashSet<>(
@@ -145,7 +138,6 @@ public class SampleHumanDetector extends HumanDetector {
       this.reference = reference;
       this.worldInfo = wi;
     }
-
 
     public int compare(StandardEntity a, StandardEntity b) {
       int d1 = this.worldInfo.getDistance(this.reference, a);

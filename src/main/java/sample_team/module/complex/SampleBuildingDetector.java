@@ -27,7 +27,8 @@ public class SampleBuildingDetector extends BuildingDetector {
   private Clustering clustering;
   private Logger logger;
 
-  public SampleBuildingDetector(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager, DevelopData developData) {
+  public SampleBuildingDetector(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager,
+      DevelopData developData) {
     super(ai, wi, si, moduleManager, developData);
     logger = DefaultLogger.getLogger(agentInfo.me());
     this.clustering = moduleManager.getModule(
@@ -36,7 +37,6 @@ public class SampleBuildingDetector extends BuildingDetector {
     registerModule(this.clustering);
   }
 
-
   @Override
   public BuildingDetector updateInfo(MessageManager messageManager) {
     logger.debug("Time:" + agentInfo.getTime());
@@ -44,13 +44,11 @@ public class SampleBuildingDetector extends BuildingDetector {
     return this;
   }
 
-
   @Override
   public BuildingDetector calc() {
     this.result = this.calcTarget();
     return this;
   }
-
 
   private EntityID calcTarget() {
     Collection<StandardEntity> entities = this.worldInfo.getEntitiesOfType(
@@ -73,9 +71,7 @@ public class SampleBuildingDetector extends BuildingDetector {
     return selectedBuilding.getID();
   }
 
-
-  private List<Building>
-      filterFiery(Collection<? extends StandardEntity> input) {
+  private List<Building> filterFiery(Collection<? extends StandardEntity> input) {
     ArrayList<Building> fireBuildings = new ArrayList<>();
     for (StandardEntity entity : input) {
       if (entity instanceof Building && ((Building) entity).isOnFire()) {
@@ -84,7 +80,6 @@ public class SampleBuildingDetector extends BuildingDetector {
     }
     return fireBuildings;
   }
-
 
   private List<Building> filterInCluster(Collection<Building> targetAreas) {
     int clusterIndex = clustering.getClusterIndex(this.agentInfo.getID());
@@ -97,7 +92,6 @@ public class SampleBuildingDetector extends BuildingDetector {
     }
     return clusterTargets;
   }
-
 
   @Override
   public EntityID getTarget() {
@@ -113,7 +107,6 @@ public class SampleBuildingDetector extends BuildingDetector {
       this.reference = reference;
       this.worldInfo = wi;
     }
-
 
     public int compare(Building a, Building b) {
       if (a.getFieryness() == 3 && b.getFieryness() != 3) {
