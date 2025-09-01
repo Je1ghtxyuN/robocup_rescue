@@ -14,10 +14,10 @@ import rescuecore2.worldmodel.EntityID;
 
 public class SampleFireTargetAllocator extends FireTargetAllocator {
 
-  public SampleFireTargetAllocator(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager, DevelopData developData) {
+  public SampleFireTargetAllocator(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager,
+      DevelopData developData) {
     super(ai, wi, si, moduleManager, developData);
   }
-
 
   @Override
   public FireTargetAllocator resume(PrecomputeData precomputeData) {
@@ -25,25 +25,21 @@ public class SampleFireTargetAllocator extends FireTargetAllocator {
     return this;
   }
 
-
   @Override
   public FireTargetAllocator preparate() {
     super.preparate();
     return this;
   }
 
-
   @Override
   public Map<EntityID, EntityID> getResult() {
     return new HashMap<>();
   }
 
-
   @Override
   public FireTargetAllocator calc() {
     return this;
   }
-
 
   @Override
   public FireTargetAllocator updateInfo(MessageManager messageManager) {
