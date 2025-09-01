@@ -187,45 +187,24 @@ public class SampleRoadDetector extends RoadDetector {
       return true;
     }
 
-    // 检查是否是人类所在区域
-    for (StandardEntity e : worldInfo.getEntitiesInArea((Area) entity)) {
-      if (e instanceof Human && isValidHuman(e)) {
-        return true;
+    // 检查是否有需要救援的人类在这个区域
+    Collection<StandardEntity> humans = worldInfo.getEntitiesOfType(
+        StandardEntityURN.CIVILIAN,
+        StandardEntityURN.AMBULANCE_TEAM,
+        StandardEntityURN.FIRE_BRIGADE,
+        StandardEntityURN.POLICE_FORCE
+    );
+    
+    for (StandardEntity humanEntity : humans) {
+      if (humanEntity instanceof Human && isValidHuman(humanEntity)) {
+        Human human = (Human) humanEntity;
+        if (human.isPositionDefined() && human.getPosition().equals(target)) {
+          return true;
+        }
       }
     }
 
     return false;
-  }
-
-  private Collection<EntityID> toEntityIds(Collection<? extends StandardEntity> entities) {
-    Collection<EntityID> ids = new ArrayList<>(entities.size());
-    for (StandardEntity entity : entities) {
-      ids.add(entity.getID());
-    }
-    return ids;
-  }
-
-  private HashSet<Area> calcTargets() {
-    // 保持与原代码兼容，但使用更高效的方式
-    HashSet<Area> areas = new HashSet<>();
-    for (EntityID id : getTargets()) {
-      StandardEntity entity = worldInfo.getEntity(id);
-      if (entity instanceof Area) {
-        areas.add((Area) entity);
-      }
-    }
-    return areas;
-  }
-
-  private HashSet<Area> filterInCluster(HashSet<Area> targetAreas) {
-    // 保持与原代码兼容，但使用更高效的方式
-    HashSet<Area> areas = new HashSet<>();
-    for (Area area : targetAreas) {
-      if (clusterEntityIds.contains(area.getID())) {
-        areas.add(area);
-      }
-    }
-    return areas;
   }
 
   @Override
