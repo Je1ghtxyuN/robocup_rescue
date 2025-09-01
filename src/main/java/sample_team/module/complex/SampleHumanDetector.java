@@ -3,6 +3,8 @@ package sample_team.module.complex;
 import static rescuecore2.standard.entities.StandardEntityURN.AMBULANCE_TEAM;
 import static rescuecore2.standard.entities.StandardEntityURN.CIVILIAN;
 import static rescuecore2.standard.entities.StandardEntityURN.REFUGE;
+import static rescuecore2.standard.entities.StandardEntityURN.POLICE_FORCE;
+import static rescuecore2.standard.entities.StandardEntityURN.FIRE_BRIGADE;
 import adf.core.agent.communication.MessageManager;
 import adf.core.agent.develop.DevelopData;
 import adf.core.agent.info.AgentInfo;
@@ -10,6 +12,7 @@ import adf.core.agent.info.ScenarioInfo;
 import adf.core.agent.info.WorldInfo;
 import adf.core.agent.module.ModuleManager;
 import adf.core.component.module.algorithm.Clustering;
+import adf.core.component.module.algorithm.PathPlanning;
 import adf.core.component.module.complex.HumanDetector;
 import adf.core.debug.DefaultLogger;
 import java.util.ArrayList;
@@ -231,23 +234,6 @@ public class SampleHumanDetector extends HumanDetector {
       }
     }
     return filter;
-  }
-
-  private class DistanceSorter implements Comparator<StandardEntity> {
-
-    private StandardEntity reference;
-    private WorldInfo worldInfo;
-
-    DistanceSorter(WorldInfo wi, StandardEntity reference) {
-      this.reference = reference;
-      this.worldInfo = wi;
-    }
-
-    public int compare(StandardEntity a, StandardEntity b) {
-      int d1 = this.worldInfo.getDistance(this.reference, a);
-      int d2 = this.worldInfo.getDistance(this.reference, b);
-      return d1 - d2;
-    }
   }
 
   // 添加优先级排序器（更新伤势严重程度）
