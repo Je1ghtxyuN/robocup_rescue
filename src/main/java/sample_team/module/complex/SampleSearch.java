@@ -1,129 +1,110 @@
 package sample_team.module.complex;
 
-import static rescuecore2.standard.entities.StandardEntityURN.AMBULANCE_CENTRE;
-import static rescuecore2.standard.entities.StandardEntityURN.AMBULANCE_TEAM;
-import static rescuecore2.standard.entities.StandardEntityURN.BUILDING;
-import static rescuecore2.standard.entities.StandardEntityURN.FIRE_BRIGADE;
-import static rescuecore2.standard.entities.StandardEntityURN.FIRE_STATION;
-import static rescuecore2.standard.entities.StandardEntityURN.GAS_STATION;
-import static rescuecore2.standard.entities.StandardEntityURN.POLICE_FORCE;
-import static rescuecore2.standard.entities.StandardEntityURN.POLICE_OFFICE;
-import static rescuecore2.standard.entities.StandardEntityURN.REFUGE;
 import adf.core.agent.communication.MessageManager;
 import adf.core.agent.develop.DevelopData;
 import adf.core.agent.info.AgentInfo;
 import adf.core.agent.info.ScenarioInfo;
 import adf.core.agent.info.WorldInfo;
 import adf.core.agent.module.ModuleManager;
-import adf.core.component.module.algorithm.Clustering;
 import adf.core.component.module.algorithm.PathPlanning;
 import adf.core.component.module.complex.Search;
-import adf.core.debug.DefaultLogger;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.List;
-import org.apache.log4j.Logger;
-import rescuecore2.standard.entities.Building;
-import rescuecore2.standard.entities.StandardEntity;
-import rescuecore2.standard.entities.StandardEntityURN;
+import rescuecore2.standard.entities.*;
 import rescuecore2.worldmodel.EntityID;
+import java.util.*;
 
 public class SampleSearch extends Search {
 
   private PathPlanning pathPlanning;
-  private Clustering clustering;
-
   private EntityID result;
-  private Collection<EntityID> unsearchedBuildingIDs;
-  private Logger logger;
 
-  public SampleSearch(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager, DevelopData developData) {
+  public SampleSearch(AgentInfo ai, WorldInfo wi, ScenarioInfo si,
+      ModuleManager moduleManager, DevelopData developData) {
     super(ai, wi, si, moduleManager, developData);
-    logger = DefaultLogger.getLogger(agentInfo.me());
-    this.unsearchedBuildingIDs = new HashSet<>();
 
+    // 根据智能体类型初始化路径规划
     StandardEntityURN agentURN = ai.me().getStandardURN();
-    if (agentURN == AMBULANCE_TEAM) {
+    if (agentURN == StandardEntityURN.POLICE_FORCE) {
       this.pathPlanning = moduleManager.getModule(
-          "SampleSearch.PathPlanning.Ambulance",
-          "adf.impl.module.algorithm.DijkstraPathPlanning");
-      this.clustering = moduleManager.getModule(
-          "SampleSearch.Clustering.Ambulance",
-          "adf.impl.module.algorithm.KMeansClustering");
-    } else if (agentURN == FIRE_BRIGADE) {
-      this.pathPlanning = moduleManager.getModule(
-          "SampleSearch.PathPlanning.Fire",
-          "adf.impl.module.algorithm.DijkstraPathPlanning");
-      this.clustering = moduleManager.getModule("SampleSearch.Clustering.Fire",
-          "adf.impl.module.algorithm.KMeansClustering");
-    } else if (agentURN == POLICE_FORCE) {
+          "SampleSearch.PathPlanning.Police",
+          "sample_team.module.algorithm.AStarPathPlanning");
+    } else {
+      // 其他类型智能体的备用方案
       this.pathPlanning = moduleManager.getModule(
           "SampleSearch.PathPlanning.Police",
           "adf.impl.module.algorithm.DijkstraPathPlanning");
-      this.clustering = moduleManager.getModule(
-          "SampleSearch.Clustering.Police",
-          "adf.impl.module.algorithm.KMeansClustering");
     }
-    registerModule(this.clustering);
-    registerModule(this.pathPlanning);
   }
-
 
   @Override
   public Search updateInfo(MessageManager messageManager) {
-    logger.debug("Time:" + agentInfo.getTime());
     super.updateInfo(messageManager);
-
-    this.unsearchedBuildingIDs
-        .removeAll(this.worldInfo.getChanged().getChangedEntities());
-    if (this.unsearchedBuildingIDs.isEmpty()) {
-      this.reset();
-      this.unsearchedBuildingIDs
-          .removeAll(this.worldInfo.getChanged().getChangedEntities());
-    }
     return this;
   }
-
 
   @Override
   public Search calc() {
-    this.result = null;
-    if (unsearchedBuildingIDs.isEmpty())
-      return this;
+    result = null;
 
-    logger.debug("unsearchedBuildingIDs: " + unsearchedBuildingIDs);
-    this.pathPlanning.setFrom(this.agentInfo.getPosition());
-    this.pathPlanning.setDestination(this.unsearchedBuildingIDs);
-    List<EntityID> path = this.pathPlanning.calc().getResult();
-    logger.debug("best path is: " + path);
-    if (path != null && path.size() > 2) {
-      this.result = path.get(path.size() - 3);
-    } else if (path != null && path.size() > 0) {
-      this.result = path.get(path.size() - 1);
+    // 修复：使用正确的getBuriedHumans方法
+    Collection<Human> buriedHumans = new ArrayList<>();
+    for (StandardEntity entity : worldInfo.getEntitiesOfType(StandardEntityURN.CIVILIAN)) {
+      Human human = (Human) entity;
+      if (human.isBuriednessDefined() && human.getBuriedness() > 0) {
+        buriedHumans.add(human);
+      }
     }
-    logger.debug("chose: " + result);
+
+    Map<EntityID, Integer> buildingBuriedCount = new HashMap<>();
+
+    for (Human human : buriedHumans) {
+      EntityID position = human.getPosition();
+      if (position != null) {
+        buildingBuriedCount.put(position, buildingBuriedCount.getOrDefault(position, 0) + 1);
+      }
+    }
+
+    if (!buildingBuriedCount.isEmpty()) {
+      // 找到有最多被困人员的建筑物
+      EntityID targetBuilding = Collections.max(
+          buildingBuriedCount.entrySet(),
+          Map.Entry.comparingByValue()).getKey();
+
+      // 计算路径
+      this.pathPlanning.setFrom(agentInfo.getPosition());
+      this.pathPlanning.setDestination(Collections.singleton(targetBuilding));
+      this.pathPlanning.calc(); // 修复：直接调用calc()而不需要返回Search对象
+      List<EntityID> path = this.pathPlanning.getResult();
+
+      if (path != null && !path.isEmpty()) {
+        // 选择路径中的下一个节点
+        this.result = path.get(0);
+        return this;
+      }
+    }
+
+    // 修复：不能调用super.calc()，因为它是抽象的
+    // 改为返回默认行为
+    this.pathPlanning.setFrom(agentInfo.getPosition());
+
+    // 获取所有建筑物作为备用目标
+    Collection<StandardEntity> buildings = worldInfo.getEntitiesOfType(StandardEntityURN.BUILDING);
+    if (!buildings.isEmpty()) {
+      List<EntityID> buildingIDs = new ArrayList<>();
+      for (StandardEntity building : buildings) {
+        buildingIDs.add(building.getID());
+      }
+
+      this.pathPlanning.setDestination(buildingIDs);
+      this.pathPlanning.calc();
+      List<EntityID> path = this.pathPlanning.getResult();
+
+      if (path != null && !path.isEmpty()) {
+        this.result = path.get(0);
+      }
+    }
+
     return this;
   }
-
-
-  private void reset() {
-    this.unsearchedBuildingIDs.clear();
-    int clusterIndex = this.clustering.getClusterIndex(this.agentInfo.getID());
-    Collection<StandardEntity> clusterEntities = this.clustering
-        .getClusterEntities(clusterIndex);
-    if (clusterEntities != null && clusterEntities.size() > 0) {
-      for (StandardEntity entity : clusterEntities) {
-        if (entity instanceof Building && entity.getStandardURN() != REFUGE) {
-          this.unsearchedBuildingIDs.add(entity.getID());
-        }
-      }
-    } else {
-      this.unsearchedBuildingIDs
-          .addAll(this.worldInfo.getEntityIDsOfType(BUILDING, GAS_STATION,
-              AMBULANCE_CENTRE, FIRE_STATION, POLICE_OFFICE));
-    }
-  }
-
 
   @Override
   public EntityID getTarget() {
