@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Set;
 import org.apache.log4j.Logger;
 import rescuecore2.standard.entities.Area;
+import rescuecore2.standard.entities.Blockade;
 import rescuecore2.standard.entities.Human;
 import rescuecore2.standard.entities.StandardEntity;
 import rescuecore2.standard.entities.StandardEntityURN;
@@ -98,38 +99,119 @@ public class SampleRoadDetector extends RoadDetector {
   }
 
 
-  private HashSet<Area> calcTargets() {
-    HashSet<Area> targetAreas = new HashSet<>();
+//   private HashSet<Area> calcTargets() {
+//     HashSet<Area> targetAreas = new HashSet<>();
     
-    // 1. 添加避难所和加油站
-    for (StandardEntity e : this.worldInfo.getEntitiesOfType(REFUGE, GAS_STATION)) {
-        targetAreas.add((Area) e);
-    }
+//     // 1. 添加避难所和加油站
+//     for (StandardEntity e : this.worldInfo.getEntitiesOfType(REFUGE, GAS_STATION)) {
+//         targetAreas.add((Area) e);
+//     }
     
-    // 2. 添加需要救援的人员位置
-    for (StandardEntity e : this.worldInfo.getEntitiesOfType(CIVILIAN,
-        AMBULANCE_TEAM, FIRE_BRIGADE, POLICE_FORCE)) {
-        if (isValidHuman(e)) {
-            Human h = (Human) e;
-            // 优化: 只添加高优先级人员位置
-            if (isHighPriorityHuman(h)) {
-                targetAreas.add((Area) worldInfo.getEntity(h.getPosition()));
-            }
-        }
-    }
+//     // 2. 添加需要救援的人员位置
+//     for (StandardEntity e : this.worldInfo.getEntitiesOfType(CIVILIAN,
+//         AMBULANCE_TEAM, FIRE_BRIGADE, POLICE_FORCE)) {
+//         if (isValidHuman(e)) {
+//             Human h = (Human) e;
+//             // 优化: 只添加高优先级人员位置
+//             if (isHighPriorityHuman(h)) {
+//                 targetAreas.add((Area) worldInfo.getEntity(h.getPosition()));
+//             }
+//         }
+//     }
     
-    HashSet<Area> inClusterTarget = filterInCluster(targetAreas);
-    inClusterTarget.removeAll(openedAreas);
-    return inClusterTarget;
-}
+//     HashSet<Area> inClusterTarget = filterInCluster(targetAreas);
+//     inClusterTarget.removeAll(openedAreas);
+//     return inClusterTarget;
+// }
 
-// 新增方法: 判断是否为高优先级人员
-private boolean isHighPriorityHuman(Human human) {
-  if (!human.isHPDefined() || !human.isDamageDefined()) {
-      return false;
+// // 新增方法: 判断是否为高优先级人员
+// private boolean isHighPriorityHuman(Human human) {
+//   if (!human.isHPDefined() || !human.isDamageDefined()) {
+//       return false;
+//   }
+//   // HP低于50或伤害高于50的视为高优先级
+//   return human.getHP() < 50 || human.getDamage() > 50;
+// }
+
+private HashSet<Area> calcTargets() {
+  HashSet<Area> targetAreas = new HashSet<>();
+  logger.debug("[RoadDetector] Starting target area calculation");
+  
+  // 获取所有障碍物位置
+  Set<EntityID> blockadePositions = new HashSet<>();
+  for (StandardEntity e : worldInfo.getEntitiesOfType(StandardEntityURN.BLOCKADE)) {
+      if (e instanceof Blockade) {
+          blockadePositions.add(((Blockade)e).getPosition());
+      }
   }
-  // HP低于50或伤害高于50的视为高优先级
-  return human.getHP() < 50 || human.getDamage() > 50;
+  logger.debug("[RoadDetector] Found " + blockadePositions.size() + " blocked road positions");
+  
+  // 1. 添加避难所和加油站
+  int refugeCount = 0;
+  int gasStationCount = 0;
+  for (StandardEntity e : this.worldInfo.getEntitiesOfType(REFUGE, GAS_STATION)) {
+      // 优先选择没有障碍物的道路
+      if (!blockadePositions.contains(e.getID())) {
+          targetAreas.add((Area) e);
+          if (e.getStandardURN() == REFUGE) refugeCount++;
+          else gasStationCount++;
+      }
+  }
+  logger.debug("[RoadDetector] Added " + refugeCount + " refuges and " + 
+              gasStationCount + " gas stations without blockades");
+  
+  // 2. 添加需要救援的人员位置
+  int humanTargets = 0;
+  for (StandardEntity e : this.worldInfo.getEntitiesOfType(CIVILIAN,
+      AMBULANCE_TEAM, FIRE_BRIGADE, POLICE_FORCE)) {
+      if (isValidHuman(e)) {
+          Human h = (Human) e;
+          StandardEntity position = worldInfo.getEntity(h.getPosition());
+          // 优先选择没有障碍物的道路
+          if (position != null && !blockadePositions.contains(position.getID())) {
+              targetAreas.add((Area) position);
+              humanTargets++;
+          }
+      }
+  }
+  logger.debug("[RoadDetector] Added " + humanTargets + " human targets without blockades");
+  
+  // 如果没有无障碍物的目标，则添加有障碍物的目标
+  if (targetAreas.isEmpty()) {
+      logger.debug("[RoadDetector] No unblocked targets found, considering blocked targets");
+      int blockedRefugeCount = 0;
+      int blockedGasStationCount = 0;
+      int blockedHumanTargets = 0;
+      
+      for (StandardEntity e : this.worldInfo.getEntitiesOfType(REFUGE, GAS_STATION)) {
+          targetAreas.add((Area) e);
+          if (e.getStandardURN() == REFUGE) blockedRefugeCount++;
+          else blockedGasStationCount++;
+      }
+      
+      for (StandardEntity e : this.worldInfo.getEntitiesOfType(CIVILIAN,
+          AMBULANCE_TEAM, FIRE_BRIGADE, POLICE_FORCE)) {
+          if (isValidHuman(e)) {
+              Human h = (Human) e;
+              StandardEntity position = worldInfo.getEntity(h.getPosition());
+              if (position != null) {
+                  targetAreas.add((Area) position);
+                  blockedHumanTargets++;
+              }
+          }
+      }
+      
+      logger.debug("[RoadDetector] Added " + blockedRefugeCount + " blocked refuges, " + 
+                  blockedGasStationCount + " blocked gas stations, and " + 
+                  blockedHumanTargets + " blocked human targets");
+  }
+  
+  HashSet<Area> inClusterTarget = filterInCluster(targetAreas);
+  inClusterTarget.removeAll(openedAreas);
+  logger.debug("[RoadDetector] Final target count after clustering and filtering: " + 
+              inClusterTarget.size());
+  
+  return inClusterTarget;
 }
 
   private HashSet<Area> filterInCluster(HashSet<Area> targetAreas) {

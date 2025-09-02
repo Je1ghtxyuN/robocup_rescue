@@ -29,6 +29,8 @@ import java.util.Map;
 import java.util.HashMap;
 
 import org.apache.log4j.Logger;
+
+import rescuecore2.standard.entities.Blockade;
 import rescuecore2.standard.entities.Building;
 import rescuecore2.standard.entities.StandardEntity;
 import rescuecore2.standard.entities.StandardEntityURN;
@@ -90,42 +92,112 @@ public class SampleSearch extends Search {
     return this;
   }
 
-  @Override
+//   @Override
+// public Search calc() {
+//     this.result = null;
+//     if (unsearchedBuildingIDs.isEmpty()) {
+//       return this;
+//     }
+
+//     logger.debug("unsearchedBuildingIDs: " + unsearchedBuildingIDs);
+//     this.pathPlanning.setFrom(this.agentInfo.getPosition());
+
+//     // 获取优先级目标
+//     Set<EntityID> priorityTargets = getPriorityTargets();
+
+//     // 如果没有找到优先级目标，使用默认目标
+//     if (priorityTargets.isEmpty()) {
+//       this.pathPlanning.setDestination(this.unsearchedBuildingIDs);
+//     } else {
+//       this.pathPlanning.setDestination(priorityTargets);
+//     }
+
+//     // 计算路径
+//     List<EntityID> path = this.pathPlanning.calc().getResult();
+
+//     // 路径容错处理 - 如果路径计算失败，选择备用目标
+//     if (path == null || path.isEmpty()) {
+//       logger.debug("Path planning failed, selecting alternative target");
+//       path = handlePathPlanningFailure();
+//     }
+
+//     if (path != null && path.size() > 2) {
+//         this.result = path.get(path.size() - 3);
+//     } else if (path != null && path.size() > 0) {
+//         this.result = path.get(path.size() - 1);
+//     }
+
+//     logger.debug("chose: " + result);
+//     return this;
+// }
+
+@Override
 public Search calc() {
     this.result = null;
+    logger.debug("[Search] Starting search calculation");
+    
     if (unsearchedBuildingIDs.isEmpty()) {
-      return this;
+        logger.debug("[Search] No unsearched buildings, resetting search area");
+        reset();
+        if (unsearchedBuildingIDs.isEmpty()) {
+            logger.debug("[Search] Still no buildings to search, returning");
+            return this;
+        }
     }
 
-    logger.debug("unsearchedBuildingIDs: " + unsearchedBuildingIDs);
+    logger.debug("[Search] Unsearched buildings: " + unsearchedBuildingIDs.size());
     this.pathPlanning.setFrom(this.agentInfo.getPosition());
+    logger.debug("[Search] Starting from position: " + this.agentInfo.getPosition());
 
-    // 获取优先级目标
-    Set<EntityID> priorityTargets = getPriorityTargets();
+    // 获取所有障碍物位置
+    Set<EntityID> blockadePositions = new HashSet<>();
+    for (StandardEntity e : worldInfo.getEntitiesOfType(StandardEntityURN.BLOCKADE)) {
+        if (e instanceof Blockade) {
+            blockadePositions.add(((Blockade)e).getPosition());
+        }
+    }
+    logger.debug("[Search] Found " + blockadePositions.size() + " blocked positions");
 
-    // 如果没有找到优先级目标，使用默认目标
+    // 优先选择没有障碍物的建筑
+    Set<EntityID> priorityTargets = new HashSet<>();
+    int unblockedBuildings = 0;
+    for (EntityID id : unsearchedBuildingIDs) {
+        StandardEntity entity = worldInfo.getEntity(id);
+        if (entity instanceof Building && !blockadePositions.contains(id)) {
+            priorityTargets.add(id);
+            unblockedBuildings++;
+        }
+    }
+    logger.debug("[Search] Found " + unblockedBuildings + " unblocked buildings");
+
+    // 如果没有无障碍物的建筑，则使用所有建筑
     if (priorityTargets.isEmpty()) {
-      this.pathPlanning.setDestination(this.unsearchedBuildingIDs);
+        logger.debug("[Search] No unblocked buildings, using all buildings as targets");
+        this.pathPlanning.setDestination(this.unsearchedBuildingIDs);
     } else {
-      this.pathPlanning.setDestination(priorityTargets);
+        logger.debug("[Search] Using " + priorityTargets.size() + " unblocked buildings as priority targets");
+        this.pathPlanning.setDestination(priorityTargets);
     }
 
-    // 计算路径
     List<EntityID> path = this.pathPlanning.calc().getResult();
 
-    // 路径容错处理 - 如果路径计算失败，选择备用目标
     if (path == null || path.isEmpty()) {
-      logger.debug("Path planning failed, selecting alternative target");
-      path = handlePathPlanningFailure();
+        logger.debug("[Search] Path planning failed, selecting alternative target");
+        path = handlePathPlanningFailure();
     }
 
-    if (path != null && path.size() > 2) {
-        this.result = path.get(path.size() - 3);
-    } else if (path != null && path.size() > 0) {
-        this.result = path.get(path.size() - 1);
+    if (path != null) {
+        if (path.size() > 2) {
+            this.result = path.get(path.size() - 3);
+            logger.debug("[Search] Selected target (3 steps ahead): " + result);
+        } else if (path.size() > 0) {
+            this.result = path.get(path.size() - 1);
+            logger.debug("[Search] Selected target (next step): " + result);
+        }
+    } else {
+        logger.debug("[Search] No valid path found");
     }
 
-    logger.debug("chose: " + result);
     return this;
 }
 

@@ -10,6 +10,9 @@ import adf.core.agent.precompute.PrecomputeData;
 import adf.core.component.module.complex.PoliceTargetAllocator;
 import adf.core.component.module.algorithm.PathPlanning;
 
+import org.apache.log4j.Logger;
+import adf.core.debug.DefaultLogger;
+
 import rescuecore2.standard.entities.Blockade;
 import rescuecore2.standard.entities.StandardEntity;
 import rescuecore2.standard.entities.StandardEntityURN;
@@ -24,9 +27,12 @@ public class SamplePoliceTargetAllocator extends PoliceTargetAllocator {
   private PathPlanning pathPlanning;
   private Set<EntityID> processedBlockades;
 
+  private Logger logger;
+
   public SamplePoliceTargetAllocator(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager,
       DevelopData developData) {
     super(ai, wi, si, moduleManager, developData);
+    this.logger = DefaultLogger.getLogger(agentInfo.me());//new log init
     this.result = new HashMap<>();
     this.processedBlockades = new HashSet<>();
 
@@ -61,30 +67,59 @@ public class SamplePoliceTargetAllocator extends PoliceTargetAllocator {
   }
 
   @Override
-  public PoliceTargetAllocator calc() {
+public PoliceTargetAllocator calc() {
     result.clear();
-
-    // 获取所有需要清理的障碍物
+    logger.debug("[PoliceTargetAllocator] Starting target allocation calculation");
+    
+    // 获取所有障碍物
     Collection<StandardEntity> blockades = worldInfo.getEntitiesOfType(StandardEntityURN.BLOCKADE);
+    logger.debug("[PoliceTargetAllocator] Found " + blockades.size() + " blockades in the world");
+    
     if (blockades.isEmpty()) {
-      return this;
+        logger.debug("[PoliceTargetAllocator] No blockades found, returning empty result");
+        return this;
     }
 
-    // 计算每个障碍物的优先级权重
-    List<BlockadePriority> priorities = calculateBlockadePriorities(blockades);
-
-    // 按照优先级排序
-    priorities.sort((a, b) -> Double.compare(b.priority, a.priority));
-
-    // 分配任务（简化版：选择最高优先级的障碍物）
-    if (!priorities.isEmpty()) {
-      EntityID blockadeId = priorities.get(0).blockadeId;
-      result.put(agentInfo.getID(), blockadeId);
-      processedBlockades.add(blockadeId);
+    // 获取警察当前位置
+    EntityID myPosition = agentInfo.getPosition();
+    logger.debug("[PoliceTargetAllocator] My current position: " + myPosition);
+    
+    // 寻找最近的障碍物
+    Blockade nearestBlockade = null;
+    int minDistance = Integer.MAX_VALUE;
+    
+    for (StandardEntity entity : blockades) {
+        if (!(entity instanceof Blockade)) {
+            continue;
+        }
+        Blockade blockade = (Blockade) entity;
+        EntityID blockadePosition = blockade.getPosition();
+        int distance = worldInfo.getDistance(myPosition, blockadePosition);
+        
+        logger.debug("[PoliceTargetAllocator] Blockade " + blockade.getID() + 
+                    " at position " + blockadePosition + 
+                    " is " + distance + " units away");
+        
+        if (distance < minDistance) {
+            minDistance = distance;
+            nearestBlockade = blockade;
+            logger.debug("[PoliceTargetAllocator] New nearest blockade found: " + 
+                        blockade.getID() + " (distance: " + distance + ")");
+        }
     }
-
+    
+    // 如果有找到障碍物，则分配清理任务
+    if (nearestBlockade != null) {
+        result.put(agentInfo.getID(), nearestBlockade.getID());
+        logger.debug("[PoliceTargetAllocator] Assigning to clear blockade " + 
+                    nearestBlockade.getID() + " at position " + 
+                    nearestBlockade.getPosition() + " (distance: " + minDistance + ")");
+    } else {
+        logger.debug("[PoliceTargetAllocator] No suitable blockade found to clear");
+    }
+    
     return this;
-  }
+}
 
   @Override
   public PoliceTargetAllocator updateInfo(MessageManager messageManager) {
