@@ -74,20 +74,18 @@ public class SampleHumanDetector extends HumanDetector {
     List<Human> rescueTargets = filterRescueTargets(
         this.worldInfo.getEntitiesOfType(CIVILIAN));
     List<Human> rescueTargetsInCluster = filterInCluster(rescueTargets);
-    List<Human> targets = rescueTargetsInCluster;
-    if (targets.isEmpty())
-      targets = rescueTargets;
+    List<Human> targets = rescueTargetsInCluster.isEmpty() ? rescueTargets : rescueTargetsInCluster;
 
     logger.debug("Targets:" + targets);
     if (!targets.isEmpty()) {
-      targets.sort(new DistanceSorter(this.worldInfo, this.agentInfo.me()));
-      Human selected = targets.get(0);
-      logger.debug("Selected:" + selected);
-      return selected.getID();
+        // 使用新的优先级排序器
+        targets.sort(new PrioritySorter(this.worldInfo, this.agentInfo.me()));
+        Human selected = targets.get(0);
+        logger.debug("Selected:" + selected);
+        return selected.getID();
     }
-
     return null;
-  }
+}
 
 
   @Override
@@ -136,23 +134,60 @@ public class SampleHumanDetector extends HumanDetector {
 
   }
 
-  private class DistanceSorter implements Comparator<StandardEntity> {
+  // 新增的优先级排序器类
+private class PrioritySorter implements Comparator<Human> {
+  private StandardEntity reference;
+  private WorldInfo worldInfo;
 
-    private StandardEntity reference;
-    private WorldInfo worldInfo;
-
-    DistanceSorter(WorldInfo wi, StandardEntity reference) {
+  PrioritySorter(WorldInfo wi, StandardEntity reference) {
       this.reference = reference;
       this.worldInfo = wi;
-    }
-
-
-    public int compare(StandardEntity a, StandardEntity b) {
-      int d1 = this.worldInfo.getDistance(this.reference, a);
-      int d2 = this.worldInfo.getDistance(this.reference, b);
-      return d1 - d2;
-    }
   }
+
+  public int compare(Human a, Human b) {
+      // 计算优先级分数 = (伤害值*0.6 + (100-HP)*0.4) / 距离
+      double priorityA = calculatePriorityScore(a);
+      double priorityB = calculatePriorityScore(b);
+      return Double.compare(priorityB, priorityA); // 降序排列
+  }
+
+  private double calculatePriorityScore(Human human) {
+      double damageWeight = 0.6;
+      double hpWeight = 0.4;
+      
+      // 获取伤害值和HP（确保已定义）
+      int damage = human.isDamageDefined() ? human.getDamage() : 0;
+      int hp = human.isHPDefined() ? human.getHP() : 100;
+      
+      // 计算距离（确保位置已定义）
+      int distance = human.isPositionDefined() ? 
+          this.worldInfo.getDistance(this.reference, human) : Integer.MAX_VALUE;
+      
+      // 避免除以零
+      distance = Math.max(1, distance);
+      
+      // 优先级公式：(damage*0.6 + (100-hp)*0.4) / distance
+      return (damage * damageWeight + (100 - hp) * hpWeight) / distance;
+  }
+}
+
+  // private class DistanceSorter implements Comparator<StandardEntity> {
+
+  //   private StandardEntity reference;
+  //   private WorldInfo worldInfo;
+
+  //   DistanceSorter(WorldInfo wi, StandardEntity reference) {
+  //     this.reference = reference;
+  //     this.worldInfo = wi;
+  //   }
+
+
+  //   public int compare(StandardEntity a, StandardEntity b) {
+  //     int d1 = this.worldInfo.getDistance(this.reference, a);
+  //     int d2 = this.worldInfo.getDistance(this.reference, b);
+  //     return d1 - d2;
+  //   }
+  // }
 
   private boolean isValidHuman(StandardEntity entity) {
     if (entity == null)

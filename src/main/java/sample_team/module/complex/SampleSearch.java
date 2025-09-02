@@ -91,7 +91,7 @@ public class SampleSearch extends Search {
   }
 
   @Override
-  public Search calc() {
+public Search calc() {
     this.result = null;
     if (unsearchedBuildingIDs.isEmpty()) {
       return this;
@@ -120,14 +120,14 @@ public class SampleSearch extends Search {
     }
 
     if (path != null && path.size() > 2) {
-      this.result = path.get(path.size() - 3);
+        this.result = path.get(path.size() - 3);
     } else if (path != null && path.size() > 0) {
-      this.result = path.get(path.size() - 1);
+        this.result = path.get(path.size() - 1);
     }
 
     logger.debug("chose: " + result);
     return this;
-  }
+}
 
   private List<EntityID> handlePathPlanningFailure() {
     // 尝试选择更近的目标

@@ -60,18 +60,18 @@ public class SampleBuildingDetector extends BuildingDetector {
 
     List<Building> fireyBuildings = filterFiery(entities);
     List<Building> clusterBuildings = filterInCluster(fireyBuildings);
-    List<Building> targets = clusterBuildings;
-    if (clusterBuildings.isEmpty())
-      targets = fireyBuildings;
+    List<Building> targets = clusterBuildings.isEmpty() ? fireyBuildings : clusterBuildings;
+    
     logger.debug("FieryBuildingsTargets: " + targets);
     if (targets.isEmpty())
-      return null;
+        return null;
 
-    Collections.sort(targets, new DistanceSorter(worldInfo, agentInfo.me()));
+    // 使用新的建筑优先级排序器
+    Collections.sort(targets, new BuildingPrioritySorter(worldInfo, agentInfo.me()));
     Building selectedBuilding = targets.get(0);
     logger.debug("Selected:" + selectedBuilding);
     return selectedBuilding.getID();
-  }
+}
 
 
   private List<Building>
@@ -103,6 +103,39 @@ public class SampleBuildingDetector extends BuildingDetector {
   public EntityID getTarget() {
     return this.result;
   }
+
+  // 新增的建筑优先级排序器类
+private class BuildingPrioritySorter implements Comparator<Building> {
+    private StandardEntity reference;
+    private WorldInfo worldInfo;
+
+    BuildingPrioritySorter(WorldInfo wi, StandardEntity reference) {
+        this.reference = reference;
+        this.worldInfo = wi;
+    }
+
+    public int compare(Building a, Building b) {
+        // 优先级: 火势严重程度(3最高) > 距离
+        if (a.getFieryness() == 3 && b.getFieryness() != 3) {
+            return -1;
+        }
+        if (a.getFieryness() != 3 && b.getFieryness() == 3) {
+            return 1;
+        }
+        
+        // 计算综合优先级分数 (火势程度 * 1000 / 距离)
+        double priorityA = calculatePriorityScore(a);
+        double priorityB = calculatePriorityScore(b);
+        return Double.compare(priorityB, priorityA); // 降序排列
+    }
+
+    private double calculatePriorityScore(Building building) {
+        int fieryness = building.getFieryness();
+        int distance = this.worldInfo.getDistance(this.reference, building);
+        distance = Math.max(1, distance); // 避免除以零
+        return (fieryness * 1000.0) / distance;
+    }
+}
 
   private class DistanceSorter implements Comparator<Building> {
 
