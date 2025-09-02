@@ -22,6 +22,8 @@ import adf.core.debug.DefaultLogger;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+
 import org.apache.log4j.Logger;
 import rescuecore2.standard.entities.Building;
 import rescuecore2.standard.entities.StandardEntity;
@@ -86,24 +88,32 @@ public class SampleSearch extends Search {
 
 
   @Override
-  public Search calc() {
+public Search calc() {
     this.result = null;
     if (unsearchedBuildingIDs.isEmpty())
-      return this;
+        return this;
 
     logger.debug("unsearchedBuildingIDs: " + unsearchedBuildingIDs);
     this.pathPlanning.setFrom(this.agentInfo.getPosition());
-    this.pathPlanning.setDestination(this.unsearchedBuildingIDs);
+    
+    // 优化: 根据建筑状态设置优先级目标
+    Set<EntityID> priorityTargets = getPriorityTargets();
+    if (!priorityTargets.isEmpty()) {
+        this.pathPlanning.setDestination(priorityTargets);
+    } else {
+        this.pathPlanning.setDestination(this.unsearchedBuildingIDs);
+    }
+    
     List<EntityID> path = this.pathPlanning.calc().getResult();
     logger.debug("best path is: " + path);
     if (path != null && path.size() > 2) {
-      this.result = path.get(path.size() - 3);
+        this.result = path.get(path.size() - 3);
     } else if (path != null && path.size() > 0) {
-      this.result = path.get(path.size() - 1);
+        this.result = path.get(path.size() - 1);
     }
     logger.debug("chose: " + result);
     return this;
-  }
+}
 
 
   private void reset() {
@@ -129,4 +139,21 @@ public class SampleSearch extends Search {
   public EntityID getTarget() {
     return this.result;
   }
+  // 使用ADF标准接口获取优先级目标
+private Set<EntityID> getPriorityTargets() {
+  Set<EntityID> priorityTargets = new HashSet<>();
+  for (EntityID id : unsearchedBuildingIDs) {
+      StandardEntity entity = worldInfo.getEntity(id);
+      if (entity instanceof Building) {
+          Building building = (Building) entity;
+          // 仅使用ADF确认存在的接口：getFieryness()和isOnFire()
+          if (building.isOnFire() && building.getFieryness() == 3) {
+              priorityTargets.add(id);
+          }
+          // 添加其他可用的优先级判断条件...
+      }
+  }
+  return priorityTargets;
+}
+
 }

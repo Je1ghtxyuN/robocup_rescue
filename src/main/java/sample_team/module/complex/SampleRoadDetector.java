@@ -100,22 +100,37 @@ public class SampleRoadDetector extends RoadDetector {
 
   private HashSet<Area> calcTargets() {
     HashSet<Area> targetAreas = new HashSet<>();
-    for (StandardEntity e : this.worldInfo.getEntitiesOfType(REFUGE,
-        GAS_STATION)) {
-      targetAreas.add((Area) e);
+    
+    // 1. 添加避难所和加油站
+    for (StandardEntity e : this.worldInfo.getEntitiesOfType(REFUGE, GAS_STATION)) {
+        targetAreas.add((Area) e);
     }
+    
+    // 2. 添加需要救援的人员位置
     for (StandardEntity e : this.worldInfo.getEntitiesOfType(CIVILIAN,
         AMBULANCE_TEAM, FIRE_BRIGADE, POLICE_FORCE)) {
-      if (isValidHuman(e)) {
-        Human h = (Human) e;
-        targetAreas.add((Area) worldInfo.getEntity(h.getPosition()));
-      }
+        if (isValidHuman(e)) {
+            Human h = (Human) e;
+            // 优化: 只添加高优先级人员位置
+            if (isHighPriorityHuman(h)) {
+                targetAreas.add((Area) worldInfo.getEntity(h.getPosition()));
+            }
+        }
     }
+    
     HashSet<Area> inClusterTarget = filterInCluster(targetAreas);
     inClusterTarget.removeAll(openedAreas);
     return inClusterTarget;
-  }
+}
 
+// 新增方法: 判断是否为高优先级人员
+private boolean isHighPriorityHuman(Human human) {
+  if (!human.isHPDefined() || !human.isDamageDefined()) {
+      return false;
+  }
+  // HP低于50或伤害高于50的视为高优先级
+  return human.getHP() < 50 || human.getDamage() > 50;
+}
 
   private HashSet<Area> filterInCluster(HashSet<Area> targetAreas) {
     int clusterIndex = clustering.getClusterIndex(this.agentInfo.getID());
