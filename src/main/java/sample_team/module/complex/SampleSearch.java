@@ -69,21 +69,16 @@ public class SampleSearch extends Search {
           buildingBuriedCount.entrySet(),
           Map.Entry.comparingByValue()).getKey();
 
-      // 计算路径
+      // 仅设置路径规划参数（不调用calc()）
       this.pathPlanning.setFrom(agentInfo.getPosition());
       this.pathPlanning.setDestination(Collections.singleton(targetBuilding));
-      this.pathPlanning.calc(); // 修复：直接调用calc()而不需要返回Search对象
-      List<EntityID> path = this.pathPlanning.getResult();
 
-      if (path != null && !path.isEmpty()) {
-        // 选择路径中的下一个节点
-        this.result = path.get(0);
-        return this;
-      }
+      // 直接返回目标建筑ID
+      this.result = targetBuilding;
+      return this;
     }
 
-    // 修复：不能调用super.calc()，因为它是抽象的
-    // 改为返回默认行为
+    // 没有被困人员时的备用行为
     this.pathPlanning.setFrom(agentInfo.getPosition());
 
     // 获取所有建筑物作为备用目标
@@ -94,13 +89,12 @@ public class SampleSearch extends Search {
         buildingIDs.add(building.getID());
       }
 
+      // 设置目的地但不调用calc()
       this.pathPlanning.setDestination(buildingIDs);
-      this.pathPlanning.calc();
-      List<EntityID> path = this.pathPlanning.getResult();
 
-      if (path != null && !path.isEmpty()) {
-        this.result = path.get(0);
-      }
+      // 随机选择一个建筑作为目标
+      EntityID randomBuilding = buildingIDs.get(new Random().nextInt(buildingIDs.size()));
+      this.result = randomBuilding;
     }
 
     return this;
