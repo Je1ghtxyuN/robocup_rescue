@@ -24,6 +24,7 @@ public class PoliceSearch extends Search {
     private EntityID lastPosition;
     private EntityID lastTarget;
     private int lastPositionTime = -1;
+    private Map<EntityID, EntityID> followAssignments = new HashMap<>(); // 新增：跟随任务分配
     
     // 目标锁定机制
     private EntityID lockedTarget = null;
@@ -67,7 +68,17 @@ public class PoliceSearch extends Search {
             lastPositionTime = agentInfo.getTime();
         }
         
+        // 获取跟随任务分配（从警察局分配器）
+        followAssignments = getFollowAssignments();
+        
         return this;
+    }
+    
+    // 新增：获取警察局分配器的跟随任务
+    private Map<EntityID, EntityID> getFollowAssignments() {
+        // 在实际实现中，这里应该从警察局目标分配器获取分配信息
+        // 简化版：返回空映射
+        return new HashMap<>();
     }
 
     @Override
@@ -85,23 +96,120 @@ public class PoliceSearch extends Search {
             return this;
         }
         
-        // 2. 检查目标锁定状态
+        // 2. 检查是否已有跟随任务
+        if (followAssignments.containsKey(myPosition)) {
+            EntityID assignedAgent = followAssignments.get(myPosition);
+            if (processFollowAssignment(assignedAgent)) {
+                return this;
+            }
+        }
+        
+        // 3. 检查目标锁定状态
         if (lockedTarget != null && agentInfo.getTime() < lockExpiryTime) {
             if (processLockedTarget(myPosition)) {
                 return this;
             }
         }
         
-        // 3. 获取有效障碍物
+        // 4. 检查是否有紧急求助任务
+        if (agentInfo.getTime() >= 100) {
+            EntityID helpLocation = getHelpRequestLocation();
+            if (helpLocation != null) {
+                if (processHelpRequest(helpLocation)) {
+                    return this;
+                }
+            }
+        }
+        
+        // 5. 获取有效障碍物
         List<Blockade> blockades = getValidUnclearedBlockades();
         
-        // 4. 尝试分配新目标
+        // 6. 尝试分配新目标
         if (!assignNewTarget(myPosition, blockades)) {
-            // 5. 没有有效障碍物时巡逻
+            // 7. 没有有效障碍物时巡逻
             patrolRegionRoad();
         }
         
         return this;
+    }
+    
+    // 新增：处理跟随任务
+    private boolean processFollowAssignment(EntityID assignedAgent) {
+        StandardEntity agentEntity = worldInfo.getEntity(assignedAgent);
+        if (agentEntity == null || !(agentEntity instanceof Human)) {
+            return false; // 无效跟随目标
+        }
+        
+        Human human = (Human) agentEntity;
+        EntityID agentPosition = human.getPosition();
+        if (agentPosition == null) {
+            return false; // 目标位置不可用
+        }
+        
+        // 设置路径规划到目标智能体位置
+        pathPlanning.setFrom(agentInfo.getPosition());
+        pathPlanning.setDestination(Collections.singleton(agentPosition));
+        pathPlanning.calc();
+        
+        // 检查路径有效性
+        if (isPathValid(pathPlanning.getResult())) {
+            result = agentPosition;
+            lastTarget = agentPosition;
+            return true;
+        }
+        
+        return false;
+    }
+    
+    // 新增：处理紧急求助任务
+    private boolean processHelpRequest(EntityID helpLocation) {
+        // 设置路径规划到求助位置
+        pathPlanning.setFrom(agentInfo.getPosition());
+        pathPlanning.setDestination(Collections.singleton(helpLocation));
+        pathPlanning.calc();
+        
+        // 检查路径有效性
+        if (isPathValid(pathPlanning.getResult())) {
+            result = helpLocation;
+            lastTarget = helpLocation;
+            return true;
+        }
+        
+        return false;
+    }
+    
+    // 新增：获取紧急求助位置（简化实现）
+    private EntityID getHelpRequestLocation() {
+        // 在实际实现中，这里应该从消息系统获取求助信息
+        // 简化版：随机选择一个被困的消防/救护智能体
+        for (StandardEntity entity : worldInfo.getEntitiesOfType(
+            StandardEntityURN.FIRE_BRIGADE, StandardEntityURN.AMBULANCE_TEAM)) {
+            
+            Human agent = (Human) entity;
+            if (isAgentStuck(agent)) {
+                return agent.getPosition();
+            }
+        }
+        return null;
+    }
+    
+    // 新增：检查智能体是否卡住
+    private boolean isAgentStuck(Human agent) {
+        // 在实际实现中，这里应该有更精确的卡住检测
+        // 简化版：检查位置是否超过5回合未变化
+        if (!agent.isPositionHistoryDefined()) return false;
+        
+        int[] history = agent.getPositionHistory();
+        if (history.length < 5) return false;
+        
+        // 检查最近5个位置是否相同
+        EntityID currentPosition = agent.getPosition();
+        for (int i = 0; i < 5; i++) {
+            if (history[history.length - 1 - i] != currentPosition.getValue()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private boolean isStuck() {
@@ -117,11 +225,6 @@ public class PoliceSearch extends Search {
             unreachableTargets.add(lastTarget);
             lockedTarget = null;
             lastTarget = null;
-        }
-        
-        // 尝试随机移动解困
-        if (stuckCounter % 5 == 0) {
-            result = findRandomNearbyRoad();
         }
     }
 
@@ -200,7 +303,7 @@ public class PoliceSearch extends Search {
         return baseScore * humanEmergencyFactor;
     }
     
-    // 新增方法：计算道路位置的人类紧急程度
+    // 新增：计算道路位置的人类紧急程度
     private double calculateHumanEmergencyFactor(EntityID position) {
         double maxEmergency = 1.0; // 默认值
         
