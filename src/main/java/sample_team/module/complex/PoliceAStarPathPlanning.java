@@ -180,9 +180,10 @@ public class PoliceAStarPathPlanning extends PathPlanning {
         }
         
         // 11. 添加当前位置（如果路径为空）
-        if (result.isEmpty()) {
-            result.add(from);
+        if (result == null || result.isEmpty()) {
+            result = Collections.singletonList(from);
             this.bestPosition = from;
+            this.bestDirection = calculateOptimalDirection(from);
         }
         
         return this;
@@ -324,7 +325,12 @@ public class PoliceAStarPathPlanning extends PathPlanning {
             fallbackTarget = findNearestTargetInClose(close, nodeMap);
         }
         
-        // 尝试3：如果还是找不到，选择最近的邻居
+        // 尝试3：如果还是找不到，选择最近的可见邻居
+        if (fallbackTarget == null) {
+            fallbackTarget = findReachableVisibleNeighbor(from);
+        }
+        
+        // 尝试4：选择最近的邻居
         if (fallbackTarget == null) {
             fallbackTarget = findNearestNeighbor();
         }
@@ -339,6 +345,34 @@ public class PoliceAStarPathPlanning extends PathPlanning {
             this.result = Collections.singletonList(from);
             this.bestPosition = from;
         }
+    }
+    
+    // 新增方法：查找可达的可见邻居
+    private EntityID findReachableVisibleNeighbor(EntityID position) {
+        int viewDistance = 50000; // 50米视野范围
+        Collection<StandardEntity> visibleEntities = worldInfo.getObjectsInRange(position, viewDistance);
+        
+        EntityID bestNeighbor = null;
+        double minDistance = Double.MAX_VALUE;
+        
+        for (StandardEntity entity : visibleEntities) {
+            if (entity instanceof Road) {
+                Road road = (Road) entity;
+                EntityID roadID = road.getID();
+                
+                // 跳过当前位置
+                if (roadID.equals(position)) continue;
+                
+                // 检查是否可达
+                double distance = worldInfo.getDistance(position, roadID);
+                if (distance < minDistance && distance > 0) {
+                    minDistance = distance;
+                    bestNeighbor = roadID;
+                }
+            }
+        }
+        
+        return bestNeighbor;
     }
     
     private EntityID findNearestTargetInOpen(List<EntityID> open, Map<EntityID, Node> nodeMap) {

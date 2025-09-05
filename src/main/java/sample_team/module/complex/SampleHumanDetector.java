@@ -16,9 +16,10 @@ import adf.core.debug.DefaultLogger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 import org.apache.log4j.Logger;
 import rescuecore2.standard.entities.Human;
 import rescuecore2.standard.entities.StandardEntity;
@@ -31,6 +32,7 @@ public class SampleHumanDetector extends HumanDetector {
     private PathPlanning pathPlanning;
     private EntityID result;
     private Logger logger;
+    private Map<EntityID, Double> humanPriorityMap = new HashMap<>();
 
     public SampleHumanDetector(AgentInfo ai, WorldInfo wi, ScenarioInfo si, 
                              ModuleManager moduleManager, DevelopData developData) {
@@ -77,20 +79,54 @@ public class SampleHumanDetector extends HumanDetector {
             this.worldInfo.getEntitiesOfType(CIVILIAN));
         List<Human> rescueTargetsInCluster = filterInCluster(rescueTargets);
         List<Human> targets = rescueTargetsInCluster.isEmpty() ? rescueTargets : rescueTargetsInCluster;
+
+        // 清空之前的优先级缓存
+        humanPriorityMap.clear();
         
-        logger.debug("Potential targets:" + targets);
+         // 计算并存储每个目标的优先级
+        for (Human target : targets) {
+            double priority = calculateHumanEmergencyPriority(target);
+            humanPriorityMap.put(target.getID(), priority);
+        }
+        
+        // 按优先级降序排序（最紧急的在前）
+        targets.sort((h1, h2) -> Double.compare(
+            humanPriorityMap.getOrDefault(h2.getID(), 0.0),
+            humanPriorityMap.getOrDefault(h1.getID(), 0.0)));
+        
+        logger.debug("Prioritized targets:" + targets);
         if (targets.isEmpty()) return null;
 
-        // 按距离排序并检查可达性
-        targets.sort(new DistanceSorter(this.worldInfo, this.agentInfo.me()));
+        // 按优先级顺序检查可达性
         for (Human candidate : targets) {
             if (isReachable(candidate)) {
                 logger.debug("Selected reachable target:" + candidate);
                 return candidate.getID();
+            } else {
+                logger.debug("Unreachable target:" + candidate);
             }
         }
         logger.warn("No reachable human targets found!");
         return null;
+    }
+
+    // 计算人类紧急程度优先级
+    private double calculateHumanEmergencyPriority(Human human) {
+        int hp = human.isHPDefined() ? human.getHP() : 10000;
+        int buriedness = human.isBuriednessDefined() ? human.getBuriedness() : 0;
+        int damage = human.isDamageDefined() ? human.getDamage() : 0;
+        
+        // 核心优先级公式：HP越低优先级越高，被埋压程度越高优先级越高
+        double priority = (10000 - hp) * 2.5 + buriedness * 15;
+        
+        // 额外因素：增加伤害权重
+        priority += damage * 0.8;
+        
+        // 距离因素：距离越近优先级越高（但权重较低）
+        int distance = worldInfo.getDistance(agentInfo.getPosition(), human.getPosition());
+        priority /= (distance / 5000.0 + 1); // 距离每增加5000，优先级降低一半
+        
+        return priority;
     }
 
     private boolean isReachable(Human target) {
@@ -137,22 +173,6 @@ public class SampleHumanDetector extends HumanDetector {
             if (inCluster.contains(position)) filter.add(h);
         }
         return filter;
-    }
-
-    private class DistanceSorter implements Comparator<StandardEntity> {
-        private StandardEntity reference;
-        private WorldInfo worldInfo;
-
-        DistanceSorter(WorldInfo wi, StandardEntity reference) {
-            this.reference = reference;
-            this.worldInfo = wi;
-        }
-
-        public int compare(StandardEntity a, StandardEntity b) {
-            int d1 = this.worldInfo.getDistance(this.reference, a);
-            int d2 = this.worldInfo.getDistance(this.reference, b);
-            return d1 - d2;
-        }
     }
 
     private boolean isValidHuman(StandardEntity entity) {
