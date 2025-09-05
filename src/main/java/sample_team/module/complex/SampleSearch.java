@@ -24,6 +24,8 @@ import java.util.HashSet;
 import java.util.List;
 import org.apache.log4j.Logger;
 import rescuecore2.standard.entities.Building;
+import rescuecore2.standard.entities.Road;
+import rescuecore2.standard.entities.Blockade;
 import rescuecore2.standard.entities.StandardEntity;
 import rescuecore2.standard.entities.StandardEntityURN;
 import rescuecore2.worldmodel.EntityID;
@@ -96,6 +98,34 @@ public class SampleSearch extends Search {
     this.pathPlanning.setDestination(this.unsearchedBuildingIDs);
     List<EntityID> path = this.pathPlanning.calc().getResult();
     logger.debug("best path is: " + path);
+
+    StandardEntityURN agentURN = agentInfo.me().getStandardURN();
+    if (agentURN == POLICE_FORCE && path != null && path.size() > 1) {
+      // 优先处理路径上的障碍物
+      for (int i = 1; i < path.size(); i++) { // 从当前位置之后的下一个点开始
+        EntityID eid = path.get(i);
+        StandardEntity entity = worldInfo.getEntity(eid);
+        if (entity instanceof Road) {
+          Road road = (Road) entity;
+          if (road.isBlockadesDefined() && road.getBlockades() != null && !road.getBlockades().isEmpty()) {
+            // 路径上有障碍物，优先返回该道路
+            this.result = road.getID();
+            logger.debug("Police: chose blockade road: " + this.result);
+            return this;
+          }
+        }
+      }
+      // 路径上无障碍物，按原逻辑返回目标建筑
+      if (path.size() > 2) {
+        this.result = path.get(path.size() - 3);
+      } else {
+        this.result = path.get(path.size() - 1);
+      }
+      logger.debug("Police: chose building: " + this.result);
+      return this;
+    }
+
+    // 非警察或无路径，保持原逻辑
     if (path != null && path.size() > 2) {
       this.result = path.get(path.size() - 3);
     } else if (path != null && path.size() > 0) {
