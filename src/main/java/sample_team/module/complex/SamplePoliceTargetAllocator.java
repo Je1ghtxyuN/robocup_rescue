@@ -16,6 +16,7 @@ public class SamplePoliceTargetAllocator extends PoliceTargetAllocator {
 
     private Map<EntityID, Set<EntityID>> unreachableMap = new HashMap<>();
     private Map<EntityID, EntityID> previousAllocation = new HashMap<>();
+    private Map<EntityID, Integer> allocationTime = new HashMap<>();
     
     public SamplePoliceTargetAllocator(AgentInfo ai, WorldInfo wi, ScenarioInfo si,
         ModuleManager moduleManager, DevelopData developData) {
@@ -23,13 +24,13 @@ public class SamplePoliceTargetAllocator extends PoliceTargetAllocator {
     }
 
     @Override
-    public PoliceTargetAllocator resume(PrecomputeData precomputeData) {
+    public SamplePoliceTargetAllocator resume(PrecomputeData precomputeData) {
         super.resume(precomputeData);
         return this;
     }
 
     @Override
-    public PoliceTargetAllocator preparate() {
+    public SamplePoliceTargetAllocator preparate() {
         super.preparate();
         return this;
     }
@@ -37,12 +38,13 @@ public class SamplePoliceTargetAllocator extends PoliceTargetAllocator {
     @Override
     public Map<EntityID, EntityID> getResult() {
         Map<EntityID, EntityID> allocation = new HashMap<>();
+        int currentTime = agentInfo.getTime();
 
-        // 获取所有警察和所有有效障碍物
+        // 获取所有警察和有效障碍物
         Collection<StandardEntity> policeForces = worldInfo.getEntitiesOfType(StandardEntityURN.POLICE_FORCE);
         List<Blockade> validBlockades = getValidBlockades();
         
-        // 按修复成本和位置分组
+        // 按修复成本分组（降序）
         Map<Integer, List<Blockade>> priorityGroups = new TreeMap<>(Collections.reverseOrder());
         for (Blockade blockade : validBlockades) {
             int cost = blockade.getRepairCost();
@@ -58,20 +60,17 @@ public class SamplePoliceTargetAllocator extends PoliceTargetAllocator {
             Blockade bestBlockade = null;
             double bestScore = Double.MIN_VALUE;
             
-            // 检查是否有上一周期的分配
-            if (previousAllocation.containsKey(policeID)) {
-                EntityID previousTarget = previousAllocation.get(policeID);
-                
-                // 如果上一目标仍然有效，优先考虑
-                for (Blockade blockade : validBlockades) {
-                    if (blockade.getPosition().equals(previousTarget)) {
-                        // 计算分配分数
-                        double score = calculateAssignmentScore(policeID, blockade);
-                        
-                        if (score > bestScore) {
-                            bestScore = score;
-                            bestBlockade = blockade;
-                        }
+            // 检查是否有有效的上次分配
+            EntityID previousTarget = previousAllocation.get(policeID);
+            if (previousTarget != null && isTargetStillValid(previousTarget, currentTime)) {
+                Blockade previousBlockade = findBlockadeByPosition(validBlockades, previousTarget);
+                if (previousBlockade != null) {
+                    double score = calculateAssignmentScore(policeID, previousBlockade);
+                    if (score > 0) {
+                        allocation.put(policeID, previousTarget);
+                        allocatedTargets.add(previousTarget);
+                        allocationTime.put(policeID, currentTime);
+                        continue;
                     }
                 }
             }
@@ -79,50 +78,68 @@ public class SamplePoliceTargetAllocator extends PoliceTargetAllocator {
             // 从高优先级组开始分配
             for (List<Blockade> group : priorityGroups.values()) {
                 for (Blockade blockade : group) {
-                    // 跳过已分配目标
-                    if (allocatedTargets.contains(blockade.getPosition())) {
-                        continue;
-                    }
+                    EntityID targetPos = blockade.getPosition();
                     
-                    // 计算分配分数
+                    if (allocatedTargets.contains(targetPos)) continue;
+                    if (isUnreachable(policeID, targetPos)) continue;
+                    
                     double score = calculateAssignmentScore(policeID, blockade);
-                    
-                    // 如果目标已分配给其他警察，降低优先级
-                    if (allocatedTargets.contains(blockade.getPosition())) {
-                        score *= 0.6;
-                    }
-                    
                     if (score > bestScore) {
                         bestScore = score;
                         bestBlockade = blockade;
                     }
                 }
                 
-                // 找到本组最佳目标
                 if (bestBlockade != null) {
-                    allocation.put(policeID, bestBlockade.getPosition());
-                    allocatedTargets.add(bestBlockade.getPosition());
+                    EntityID targetPos = bestBlockade.getPosition();
+                    allocation.put(policeID, targetPos);
+                    allocatedTargets.add(targetPos);
+                    allocationTime.put(policeID, currentTime);
                     break;
                 }
             }
         }
         
-        // 保存当前分配供下一周期参考
+        // 保存当前分配
         previousAllocation = new HashMap<>(allocation);
-
         return allocation;
+    }
+
+    private Blockade findBlockadeByPosition(List<Blockade> blockades, EntityID position) {
+        for (Blockade b : blockades) {
+            if (b.getPosition().equals(position)) {
+                return b;
+            }
+        }
+        return null;
+    }
+
+    private boolean isTargetStillValid(EntityID target, int currentTime) {
+        // 分配时间在最近30秒内
+        if (currentTime - allocationTime.getOrDefault(target, -1000) > 30) {
+            return false;
+        }
+        
+        // 检查目标是否仍然存在
+        StandardEntity entity = worldInfo.getEntity(target);
+        if (!(entity instanceof Road)) return false;
+        
+        Road road = (Road) entity;
+        return road.isBlockadesDefined() && !road.getBlockades().isEmpty();
     }
 
     private double calculateAssignmentScore(EntityID policeID, Blockade blockade) {
         int distance = worldInfo.getDistance(policeID, blockade.getPosition());
+        if (distance < 0) return -1; // 不可达
+        
         int cost = blockade.getRepairCost();
         
-        // 基础分数 = 成本/距离^0.7（减弱距离影响）
-        double score = cost * 100.0 / Math.pow(distance + 1, 0.7);
+        // 基础分数 = 成本/距离^0.8
+        double score = cost * 100.0 / Math.pow(distance + 1, 0.8);
         
         // 如果之前不可达，降低优先级
         if (isUnreachable(policeID, blockade.getPosition())) {
-            score *= 0.3;
+            score *= 0.4;
         }
         
         return score;
@@ -139,34 +156,40 @@ public class SamplePoliceTargetAllocator extends PoliceTargetAllocator {
             Blockade blockade = (Blockade) entity;
             
             // 有效性检查
-            if (blockade.isRepairCostDefined() && 
-                blockade.getRepairCost() > 0 &&
-                blockade.getPosition() != null) {
+            if (!blockade.isRepairCostDefined() || blockade.getRepairCost() <= 0) continue;
+            if (blockade.getPosition() == null) continue;
+            if (!isBlockadeActive(blockade)) continue;
                 
-                blockades.add(blockade);
-            }
+            blockades.add(blockade);
         }
         
         // 按修复成本降序排序
         blockades.sort((b1, b2) -> Integer.compare(b2.getRepairCost(), b1.getRepairCost()));
         return blockades;
     }
+    
+    private boolean isBlockadeActive(Blockade blockade) {
+        EntityID position = blockade.getPosition();
+        StandardEntity entity = worldInfo.getEntity(position);
+        if (!(entity instanceof Road)) return false;
+        
+        Road road = (Road) entity;
+        return road.isBlockadesDefined() && road.getBlockades().contains(blockade.getID());
+    }
 
     @Override
-    public PoliceTargetAllocator calc() {
-        // 更新不可达地图
+    public SamplePoliceTargetAllocator calc() {
         updateUnreachableMap();
         return this;
     }
     
     private void updateUnreachableMap() {
-        // 从消息中获取不可达信息
-        // （实际实现需要与PoliceSearch协调）
-        // 这里简化处理，实际需要从消息系统获取
+        // 从通信消息中获取不可达信息（简化实现）
+        // 实际项目中应从消息系统获取
     }
 
     @Override
-    public PoliceTargetAllocator updateInfo(MessageManager messageManager) {
+    public SamplePoliceTargetAllocator updateInfo(MessageManager messageManager) {
         super.updateInfo(messageManager);
         return this;
     }

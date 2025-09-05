@@ -16,14 +16,16 @@ import java.util.*;
 public class PoliceSearch extends Search {
 
     private PathPlanning pathPlanning;
-    private Clustering clustering; // 新增聚类模块
+    private Clustering clustering;
     private EntityID result;
     private boolean initialized = false;
     private Set<EntityID> unreachableTargets = new HashSet<>();
     private int stuckCounter = 0;
+    private EntityID lastPosition;
     private EntityID lastTarget;
+    private int lastPositionTime = -1;
     
-    // 新增目标锁定机制
+    // 目标锁定机制
     private EntityID lockedTarget = null;
     private int lockExpiryTime = 0;
 
@@ -36,9 +38,8 @@ public class PoliceSearch extends Search {
         if (!initialized) {
             this.pathPlanning = moduleManager.getModule(
                 "PoliceSearch.PathPlanning",
-                "sample_team.module.algorithm.PoliceAStarPathPlanning");
+                "sample_team.module.complex.PoliceAStarPathPlanning");
             
-            // 获取聚类模块
             this.clustering = moduleManager.getModule(
                 "PoliceSearch.Clustering",
                 "adf.impl.module.algorithm.KMeansClustering");
@@ -54,9 +55,16 @@ public class PoliceSearch extends Search {
             pathPlanning.updateInfo(messageManager);
         }
         
-        // 每30步重置不可达目标列表
+        // 定期重置不可达目标列表
         if (agentInfo.getTime() % 30 == 0) {
             unreachableTargets.clear();
+        }
+        
+        // 更新位置历史
+        EntityID currentPosition = agentInfo.getPosition();
+        if (!currentPosition.equals(lastPosition)) {
+            lastPosition = currentPosition;
+            lastPositionTime = agentInfo.getTime();
         }
         
         return this;
@@ -71,93 +79,131 @@ public class PoliceSearch extends Search {
         result = null;
         EntityID myPosition = agentInfo.getPosition();
         
-        // 检查目标锁定状态
+        // 1. 检查卡住状态（5秒内位置未变化）
+        if (isStuck()) {
+            handleStuckSituation();
+            return this;
+        }
+        
+        // 2. 检查目标锁定状态
         if (lockedTarget != null && agentInfo.getTime() < lockExpiryTime) {
-            pathPlanning.setFrom(myPosition);
-            pathPlanning.setDestination(Collections.singleton(lockedTarget));
-            pathPlanning.calc();
-            
-            if (isPathValid(pathPlanning.getResult())) {
-                result = lockedTarget;
-                lastTarget = lockedTarget;
+            if (processLockedTarget(myPosition)) {
                 return this;
-            } else {
-                // 锁定目标不可达，解除锁定
-                lockedTarget = null;
             }
         }
         
-        // 检测是否卡住
-        if (lastTarget != null && myPosition.equals(lastTarget)) {
-            stuckCounter++;
-            
-            // 动态阈值：距离越远容忍时间越长
-            int distance = worldInfo.getDistance(myPosition, lastTarget);
-            int dynamicThreshold = 10 + (int)(distance / 50000); // 每50米增加1步容忍度
-            
-            if (stuckCounter > dynamicThreshold) {
-                unreachableTargets.add(lastTarget);
-                stuckCounter = 0;
-                lastTarget = null;
-            }
-        } else {
-            stuckCounter = 0;
-        }
-        
-        // 获取有效的未清理障碍物
+        // 3. 获取有效障碍物
         List<Blockade> blockades = getValidUnclearedBlockades();
         
-        if (!blockades.isEmpty()) {
-            // 按优先级排序
-            blockades.sort((b1, b2) -> {
-                double p1 = calculatePriority(myPosition, b1);
-                double p2 = calculatePriority(myPosition, b2);
-                return Double.compare(p2, p1);
-            });
-
-            // 尝试所有有效目标，而不仅是前3个
-            for (Blockade targetBlockade : blockades) {
-                EntityID roadID = targetBlockade.getPosition();
-                
-                // 跳过不可达目标
-                if (unreachableTargets.contains(roadID)) {
-                    continue;
-                }
-                
-                // 设置路径规划
-                pathPlanning.setFrom(myPosition);
-                pathPlanning.setDestination(Collections.singleton(roadID));
-                pathPlanning.calc();
-                
-                // 检查路径是否有效
-                if (isPathValid(pathPlanning.getResult())) {
-                    result = roadID;
-                    lastTarget = roadID;
-                    
-                    // 设置目标锁定
-                    lockedTarget = roadID;
-                    lockExpiryTime = agentInfo.getTime() + 30; // 锁定30步
-                    
-                    return this;
-                } else {
-                    unreachableTargets.add(roadID);
-                }
-            }
+        // 4. 尝试分配新目标
+        if (!assignNewTarget(myPosition, blockades)) {
+            // 5. 没有有效障碍物时巡逻
+            patrolRegionRoad();
         }
         
-        // 没有有效障碍物时基于聚类区域巡逻
-        patrolRegionRoad();
         return this;
+    }
+
+    private boolean isStuck() {
+        // 当前位置停留超过5秒（25步）视为卡住
+        return (agentInfo.getTime() - lastPositionTime) > 25;
+    }
+
+    private void handleStuckSituation() {
+        stuckCounter++;
+        
+        // 清除当前目标
+        if (lastTarget != null) {
+            unreachableTargets.add(lastTarget);
+            lockedTarget = null;
+            lastTarget = null;
+        }
+        
+        // 尝试随机移动解困
+        if (stuckCounter % 5 == 0) {
+            result = findRandomNearbyRoad();
+        }
+    }
+
+    private boolean processLockedTarget(EntityID myPosition) {
+        pathPlanning.setFrom(myPosition);
+        pathPlanning.setDestination(Collections.singleton(lockedTarget));
+        pathPlanning.calc();
+        
+        if (isPathValid(pathPlanning.getResult())) {
+            result = lockedTarget;
+            lastTarget = lockedTarget;
+            
+            // 到达目标时检查有效性
+            if (myPosition.equals(lockedTarget) && !isTargetValid(lockedTarget)) {
+                unreachableTargets.add(lockedTarget);
+                lockedTarget = null;
+                lastTarget = null;
+                return false;
+            }
+            return true;
+        } else {
+            unreachableTargets.add(lockedTarget);
+            lockedTarget = null;
+            return false;
+        }
+    }
+
+    private boolean assignNewTarget(EntityID myPosition, List<Blockade> blockades) {
+        if (blockades.isEmpty()) return false;
+        
+        // 按优先级排序
+        blockades.sort((b1, b2) -> {
+            double p1 = calculatePriority(myPosition, b1);
+            double p2 = calculatePriority(myPosition, b2);
+            return Double.compare(p2, p1);
+        });
+
+        // 尝试所有有效目标
+        for (Blockade targetBlockade : blockades) {
+            EntityID roadID = targetBlockade.getPosition();
+            
+            // 跳过不可达目标
+            if (unreachableTargets.contains(roadID)) continue;
+            
+            // 设置路径规划
+            pathPlanning.setFrom(myPosition);
+            pathPlanning.setDestination(Collections.singleton(roadID));
+            pathPlanning.calc();
+            
+            // 检查路径有效性
+            if (isPathValid(pathPlanning.getResult())) {
+                result = roadID;
+                lastTarget = roadID;
+                
+                // 设置目标锁定
+                lockedTarget = roadID;
+                lockExpiryTime = agentInfo.getTime() + 30;
+                return true;
+            } else {
+                unreachableTargets.add(roadID);
+            }
+        }
+        return false;
     }
 
     private double calculatePriority(EntityID position, Blockade blockade) {
         int cost = blockade.getRepairCost();
         int distance = worldInfo.getDistance(position, blockade.getPosition());
-        return (cost * 100.0) / (distance + 1); // 成本优先，同时考虑距离
+        return (cost * 100.0) / (distance + 1);
     }
 
     private boolean isPathValid(List<EntityID> path) {
         return path != null && !path.isEmpty();
+    }
+
+    private boolean isTargetValid(EntityID target) {
+        // 检查目标是否仍然有效
+        StandardEntity entity = worldInfo.getEntity(target);
+        if (!(entity instanceof Road)) return false;
+        
+        Road road = (Road) entity;
+        return road.isBlockadesDefined() && !road.getBlockades().isEmpty();
     }
 
     private List<Blockade> getValidUnclearedBlockades() {
@@ -166,83 +212,82 @@ public class PoliceSearch extends Search {
             Blockade blockade = (Blockade) entity;
             
             // 有效性检查
-            if (blockade.isRepairCostDefined() && 
-                blockade.getRepairCost() > 0 &&
-                blockade.getPosition() != null &&
-                !unreachableTargets.contains(blockade.getPosition())) {
+            if (!blockade.isRepairCostDefined() || blockade.getRepairCost() <= 0) continue;
+            if (blockade.getPosition() == null) continue;
+            if (unreachableTargets.contains(blockade.getPosition())) continue;
+            if (!isBlockadeActive(blockade)) continue;
                 
-                blockades.add(blockade);
-            }
+            blockades.add(blockade);
         }
         return blockades;
     }
 
+    private boolean isBlockadeActive(Blockade blockade) {
+        EntityID position = blockade.getPosition();
+        StandardEntity entity = worldInfo.getEntity(position);
+        if (!(entity instanceof Road)) return false;
+        
+        Road road = (Road) entity;
+        return road.isBlockadesDefined() && road.getBlockades().contains(blockade.getID());
+    }
+
     private void patrolRegionRoad() {
         if (clustering == null) {
-            // 回退到随机巡逻
             patrolRandomRoad();
             return;
         }
         
-        // 获取警察所属聚类区域
         int clusterIndex = clustering.getClusterIndex(agentInfo.getID());
         Collection<StandardEntity> clusterEntities = clustering.getClusterEntities(clusterIndex);
         
-        List<EntityID> reachableRoads = new ArrayList<>();
-        
-        for (StandardEntity entity : clusterEntities) {
-            if (entity instanceof Road) {
-                EntityID roadID = entity.getID();
-                
-                // 跳过不可达道路
-                if (unreachableTargets.contains(roadID)) {
-                    continue;
-                }
-                
-                // 快速距离检查
-                if (worldInfo.getDistance(agentInfo.getPosition(), roadID) < 100000) {
-                    reachableRoads.add(roadID);
-                }
-            }
-        }
+        List<EntityID> reachableRoads = getReachableRoads(clusterEntities);
         
         if (!reachableRoads.isEmpty()) {
-            // 在所属区域内随机选择道路
             result = reachableRoads.get(new Random().nextInt(reachableRoads.size()));
             lastTarget = result;
         } else {
-            // 区域内无合适道路，回退到全局随机
             patrolRandomRoad();
         }
     }
     
-    private void patrolRandomRoad() {
-        Collection<StandardEntity> roads = worldInfo.getEntitiesOfType(StandardEntityURN.ROAD);
-        List<EntityID> reachableRoads = new ArrayList<>();
-        
-        for (StandardEntity road : roads) {
-            EntityID roadID = road.getID();
+    private List<EntityID> getReachableRoads(Collection<StandardEntity> entities) {
+        List<EntityID> roads = new ArrayList<>();
+        for (StandardEntity entity : entities) {
+            if (!(entity instanceof Road)) continue;
+            if (unreachableTargets.contains(entity.getID())) continue;
             
-            // 跳过不可达道路
-            if (unreachableTargets.contains(roadID)) {
-                continue;
-            }
-            
-            // 快速距离检查
-            if (worldInfo.getDistance(agentInfo.getPosition(), roadID) < 100000) {
-                reachableRoads.add(roadID);
-            }
+            roads.add(entity.getID());
         }
+        return roads;
+    }
+    
+    private void patrolRandomRoad() {
+        Collection<StandardEntity> allRoads = worldInfo.getEntitiesOfType(StandardEntityURN.ROAD);
+        List<EntityID> reachableRoads = getReachableRoads(allRoads);
         
         if (!reachableRoads.isEmpty()) {
-            // 随机选择可达道路
             result = reachableRoads.get(new Random().nextInt(reachableRoads.size()));
-            lastTarget = result;
-        } else if (!roads.isEmpty()) {
-            // 如果无可达道路，则随机选择
-            result = new ArrayList<>(roads).get(0).getID();
-            lastTarget = result;
+        } else if (!allRoads.isEmpty()) {
+            result = new ArrayList<>(allRoads).get(0).getID();
         }
+        lastTarget = result;
+    }
+    
+    private EntityID findRandomNearbyRoad() {
+        EntityID current = agentInfo.getPosition();
+        Collection<StandardEntity> nearby = worldInfo.getObjectsInRange(current, 50000);
+        
+        List<Road> roads = new ArrayList<>();
+        for (StandardEntity entity : nearby) {
+            if (entity instanceof Road) {
+                roads.add((Road) entity);
+            }
+        }
+        
+        if (!roads.isEmpty()) {
+            return roads.get(new Random().nextInt(roads.size())).getID();
+        }
+        return null;
     }
 
     @Override
