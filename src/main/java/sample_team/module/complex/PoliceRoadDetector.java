@@ -47,7 +47,7 @@ public class PoliceRoadDetector extends RoadDetector {
             visibleRoads.add(currentArea.getID());
         }
         
-        // 2. 获取视野范围内的道路（使用视野距离而不是固定距离）
+        // 2. 获取视野范围内的道路
         int viewDistance = calculateViewDistance();
         Collection<StandardEntity> visibleEntities = worldInfo.getObjectsInRange(position, viewDistance);
         
@@ -78,17 +78,9 @@ public class PoliceRoadDetector extends RoadDetector {
         return this;
     }
 
-    // 计算警察实际视野距离（基于移动速度）
+    // 计算警察实际视野距离
     private int calculateViewDistance() {
-        int baseDistance = 30000; // 基础视野距离
-        // if (agentInfo instanceof Human) {
-        //     Human human = (Human) agentInfo;
-        //     // 如果正在移动，扩大视野
-        //     if (human.isPositionDefined() && !human.getPosition().equals(agentInfo.getPosition())) {
-        //         return baseDistance * 2;
-        //     }
-        // }
-        return baseDistance;
+        return 30000; // 基础视野距离
     }
 
     // 获取视野内道路上的障碍物
@@ -144,22 +136,50 @@ public class PoliceRoadDetector extends RoadDetector {
         // 可见性因子（当前视野内优先级更高）
         double visibilityFactor = (visibleRoads.contains(blockade.getPosition())) ? 1.5 : 1.0;
         
-        return severity * distanceFactor * timeFactor * visibilityFactor;
+        // 新增：人类紧急程度因子（HP低或被埋压严重的优先）
+        double humanEmergencyFactor = calculateHumanEmergencyFactor(blockade.getPosition());
+        
+        return severity * distanceFactor * timeFactor * visibilityFactor * humanEmergencyFactor;
+    }
+
+    // 新增方法：计算道路位置的人类紧急程度
+    private double calculateHumanEmergencyFactor(EntityID position) {
+        double maxEmergency = 1.0; // 默认值
+        
+        // 获取该位置的所有人类（平民）
+        Collection<StandardEntity> humans = worldInfo.getEntitiesOfType(StandardEntityURN.CIVILIAN);
+        for (StandardEntity entity : humans) {
+            Human human = (Human) entity;
+            if (position.equals(human.getPosition())) {
+                // 计算人类紧急程度：HP越低紧急度越高，被埋压程度越高紧急度越高
+                int hp = human.isHPDefined() ? human.getHP() : 10000;
+                int buriedness = human.isBuriednessDefined() ? human.getBuriedness() : 0;
+                
+                // 紧急程度 = (10000 - HP) + buriedness * 2
+                double emergency = (10000 - hp) + (buriedness * 2);
+                if (emergency > maxEmergency) {
+                    maxEmergency = emergency;
+                }
+            }
+        }
+        
+        // 紧急程度因子 = 1.0 + emergency/100
+        return 1.0 + (maxEmergency / 10000.0);
     }
 
     private boolean isValidBlockade(Blockade blockade) {
-        // 1. 基础有效性检查
+        // 基础有效性检查
         if (!blockade.isRepairCostDefined() || blockade.getRepairCost() <= 0) {
             return false;
         }
         
-        // 2. 位置有效性检查
+        // 位置有效性检查
         EntityID position = blockade.getPosition();
         if (position == null) {
             return false;
         }
         
-        // 3. 检查是否已被处理
+        // 检查是否已被处理
         StandardEntity road = worldInfo.getEntity(position);
         if (road instanceof Road) {
             Road r = (Road) road;

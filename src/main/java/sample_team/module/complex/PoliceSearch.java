@@ -190,7 +190,39 @@ public class PoliceSearch extends Search {
     private double calculatePriority(EntityID position, Blockade blockade) {
         int cost = blockade.getRepairCost();
         int distance = worldInfo.getDistance(position, blockade.getPosition());
-        return (cost * 100.0) / (distance + 1);
+        
+        // 基础分数
+        double baseScore = (cost * 100.0) / (distance + 1);
+        
+        // 新增：人类紧急程度因子
+        double humanEmergencyFactor = calculateHumanEmergencyFactor(blockade.getPosition());
+        
+        return baseScore * humanEmergencyFactor;
+    }
+    
+    // 新增方法：计算道路位置的人类紧急程度
+    private double calculateHumanEmergencyFactor(EntityID position) {
+        double maxEmergency = 1.0; // 默认值
+        
+        // 获取该位置的所有人类（平民）
+        Collection<StandardEntity> humans = worldInfo.getEntitiesOfType(StandardEntityURN.CIVILIAN);
+        for (StandardEntity entity : humans) {
+            Human human = (Human) entity;
+            if (position.equals(human.getPosition())) {
+                // 计算人类紧急程度：HP越低紧急度越高，被埋压程度越高紧急度越高
+                int hp = human.isHPDefined() ? human.getHP() : 10000;
+                int buriedness = human.isBuriednessDefined() ? human.getBuriedness() : 0;
+                
+                // 紧急程度 = (10000 - HP) * 1.5 + buriedness * 2
+                double emergency = (10000 - hp) * 1.5 + (buriedness * 2);
+                if (emergency > maxEmergency) {
+                    maxEmergency = emergency;
+                }
+            }
+        }
+        
+        // 紧急程度因子 = 1.0 + emergency/150
+        return 1.0 + (maxEmergency / 5000.0);
     }
 
     private boolean isPathValid(List<EntityID> path) {

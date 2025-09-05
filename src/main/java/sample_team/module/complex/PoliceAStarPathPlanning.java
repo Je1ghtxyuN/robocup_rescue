@@ -11,6 +11,7 @@ import rescuecore2.misc.collections.LazyMap;
 import rescuecore2.standard.entities.*;
 import rescuecore2.worldmodel.Entity;
 import rescuecore2.worldmodel.EntityID;
+import rescuecore2.misc.Pair;
 
 import java.util.*;
 
@@ -22,6 +23,11 @@ public class PoliceAStarPathPlanning extends PathPlanning {
     private Collection<EntityID> targets;
     private List<EntityID> result;
     private WorldInfo worldInfo;
+    
+    // 新增方向优化字段
+    private int bestDirection = -1;
+    private EntityID bestPosition;
+    private Map<EntityID, Integer> directionCache = new HashMap<>();
 
     public PoliceAStarPathPlanning(AgentInfo ai, WorldInfo wi, ScenarioInfo si, 
                                  ModuleManager moduleManager, DevelopData developData) {
@@ -66,6 +72,16 @@ public class PoliceAStarPathPlanning extends PathPlanning {
     public List<EntityID> getResult() {
         return this.result;
     }
+    
+    // 新增方法：获取最佳清理方向
+    public int getBestDirection() {
+        return this.bestDirection;
+    }
+    
+    // 新增方法：获取最佳清理位置
+    public EntityID getBestPosition() {
+        return this.bestPosition;
+    }
 
     @Override
     public PathPlanning setFrom(EntityID id) {
@@ -99,6 +115,10 @@ public class PoliceAStarPathPlanning extends PathPlanning {
 
     @Override
     public PathPlanning calc() {
+        // 重置方向优化字段
+        this.bestDirection = -1;
+        this.bestPosition = null;
+        
         // 1. 如果目标为空，返回空路径
         if (targets == null || targets.isEmpty()) {
             this.result = Collections.emptyList();
@@ -108,6 +128,9 @@ public class PoliceAStarPathPlanning extends PathPlanning {
         // 2. 如果当前位置就是目标，直接返回当前位置
         if (targets.contains(from)) {
             this.result = Collections.singletonList(from);
+            this.bestPosition = from;
+            // 计算并缓存方向
+            this.bestDirection = calculateOptimalDirection(from);
             return this;
         }
         
@@ -147,6 +170,9 @@ public class PoliceAStarPathPlanning extends PathPlanning {
         // 9. 构建结果路径
         if (foundPath && actualTarget != null) {
             buildPath(nodeMap, actualTarget);
+            // 计算并缓存最佳方向
+            this.bestDirection = calculateOptimalDirection(actualTarget);
+            this.bestPosition = actualTarget;
         } 
         // 10. 如果没有找到路径，尝试寻找次优路径
         else {
@@ -156,9 +182,51 @@ public class PoliceAStarPathPlanning extends PathPlanning {
         // 11. 添加当前位置（如果路径为空）
         if (result.isEmpty()) {
             result.add(from);
+            this.bestPosition = from;
         }
         
         return this;
+    }
+    
+    // 新增方法：计算最佳清理方向（核心优化）
+    private int calculateOptimalDirection(EntityID targetPosition) {
+        // 检查缓存
+        if (directionCache.containsKey(targetPosition)) {
+            return directionCache.get(targetPosition);
+        }
+        
+        Blockade blockade = blockadeInfo.get(targetPosition);
+        if (blockade == null || !blockade.isApexesDefined()) {
+            return -1; // 无效方向
+        }
+        
+        // 计算障碍物中心点
+        int[] apexes = blockade.getApexes();
+        int centerX = 0, centerY = 0;
+        for (int i = 0; i < apexes.length; i += 2) {
+            centerX += apexes[i];
+            centerY += apexes[i + 1];
+        }
+        centerX /= (apexes.length / 2);
+        centerY /= (apexes.length / 2);
+        
+        // 获取道路中心位置
+        Pair<Integer, Integer> roadPos = worldInfo.getLocation(targetPosition);
+        if (roadPos == null) return -1;
+        
+        // 计算方向向量
+        int dx = centerX - roadPos.first();
+        int dy = centerY - roadPos.second();
+        
+        // 计算角度（0-360度）
+        double angle = Math.toDegrees(Math.atan2(dy, dx));
+        if (angle < 0) angle += 360;
+        
+        int direction = (int) Math.round(angle);
+        
+        // 缓存结果
+        directionCache.put(targetPosition, direction);
+        return direction;
     }
     
     private Node getBestNode(List<EntityID> open, Map<EntityID, Node> nodeMap) {
@@ -214,7 +282,7 @@ public class PoliceAStarPathPlanning extends PathPlanning {
             // 障碍物修复成本越高，移动成本越高（鼓励优先清除）
             cost += blockade.getRepairCost() * 0.5;
         }
-        
+
         // 增加警察负担成本（避免过多警察聚集）
         int nearbyPolice = countNearbyPolice(to);
         cost += nearbyPolice * 20.0; // 每个附近警察增加20点成本
@@ -232,6 +300,7 @@ public class PoliceAStarPathPlanning extends PathPlanning {
         }
         return Math.max(0, count - 1); // 不包括自己
     }
+
     
     private void buildPath(Map<EntityID, Node> nodeMap, EntityID target) {
         List<EntityID> path = new LinkedList<>();
@@ -263,8 +332,12 @@ public class PoliceAStarPathPlanning extends PathPlanning {
         // 构建回退路径
         if (fallbackTarget != null) {
             buildPath(nodeMap, fallbackTarget);
+            // 计算并缓存方向
+            this.bestDirection = calculateOptimalDirection(fallbackTarget);
+            this.bestPosition = fallbackTarget;
         } else {
-            this.result = Collections.singletonList(from); // 最终回退：留在原地
+            this.result = Collections.singletonList(from);
+            this.bestPosition = from;
         }
     }
     
@@ -316,6 +389,7 @@ public class PoliceAStarPathPlanning extends PathPlanning {
         return best;
     }
 
+    // Node 内部类（已存在）
     private class Node {
         private EntityID id;
         private EntityID parent;
