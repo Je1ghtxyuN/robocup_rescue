@@ -213,8 +213,8 @@ public class PoliceSearch extends Search {
                 int hp = human.isHPDefined() ? human.getHP() : 10000;
                 int buriedness = human.isBuriednessDefined() ? human.getBuriedness() : 0;
                 
-                // 紧急程度 = (10000 - HP) * 1.5 + buriedness * 2
-                double emergency = (10000 - hp) * 1.5 + (buriedness * 2);
+                // 紧急程度 = (10000 - HP) * 1.5 + buriedness * 10
+                double emergency = (10000 - hp) * 2.5 + (buriedness * 10);
                 if (emergency > maxEmergency) {
                     maxEmergency = emergency;
                 }
@@ -222,7 +222,7 @@ public class PoliceSearch extends Search {
         }
         
         // 紧急程度因子 = 1.0 + emergency/150
-        return 1.0 + (maxEmergency / 5000.0);
+        return 1.0 + (maxEmergency / 3);
     }
 
     private boolean isPathValid(List<EntityID> path) {

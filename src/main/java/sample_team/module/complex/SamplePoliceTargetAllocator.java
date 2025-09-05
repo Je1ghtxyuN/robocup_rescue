@@ -161,8 +161,8 @@ public class SamplePoliceTargetAllocator extends PoliceTargetAllocator {
                 int hp = human.isHPDefined() ? human.getHP() : 10000;
                 int buriedness = human.isBuriednessDefined() ? human.getBuriedness() : 0;
                 
-                // 紧急程度 = (10000 - HP) + buriedness * 3
-                double emergency = (10000- hp) + (buriedness * 3);
+                // 紧急程度 = (10000 - HP) + buriedness * 100
+                double emergency = (10000- hp) + (buriedness * 100);
                 if (emergency > maxEmergency) {
                     maxEmergency = emergency;
                 }
@@ -170,7 +170,7 @@ public class SamplePoliceTargetAllocator extends PoliceTargetAllocator {
         }
         
         // 紧急程度因子 = 1.0 + emergency/120
-        return 1.0 + (maxEmergency / 4000.0);
+        return 1.0 + (maxEmergency / 2000.0);
     }
     
     private boolean isUnreachable(EntityID policeID, EntityID target) {

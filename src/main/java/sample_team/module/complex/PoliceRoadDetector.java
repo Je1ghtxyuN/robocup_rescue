@@ -155,8 +155,8 @@ public class PoliceRoadDetector extends RoadDetector {
                 int hp = human.isHPDefined() ? human.getHP() : 10000;
                 int buriedness = human.isBuriednessDefined() ? human.getBuriedness() : 0;
                 
-                // 紧急程度 = (10000 - HP) + buriedness * 2
-                double emergency = (10000 - hp) + (buriedness * 2);
+                // 紧急程度 = (10000 - HP) + buriedness * 10
+                double emergency = (10000 - hp) + (buriedness * 10);
                 if (emergency > maxEmergency) {
                     maxEmergency = emergency;
                 }
