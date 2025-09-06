@@ -10,6 +10,7 @@ import adf.core.component.module.algorithm.Clustering;
 import adf.core.component.module.complex.RoadDetector;
 import rescuecore2.standard.entities.*;
 import rescuecore2.worldmodel.EntityID;
+import sample_team.module.complex.KMeans;
 import java.util.*;
 
 public class SampleRoadDetector extends RoadDetector {
@@ -25,7 +26,7 @@ public class SampleRoadDetector extends RoadDetector {
         super(ai, wi, si, moduleManager, developData);
         this.clustering = moduleManager.getModule(
             "SampleRoadDetector.Clustering",
-            "adf.impl.module.algorithm.KMeansClustering");
+            "sample_team.module.complex.KMeans");
     }
 
     @Override
@@ -191,39 +192,68 @@ public class SampleRoadDetector extends RoadDetector {
         return true;
     }
 
-    private void detectUsingClustering() {
-        int clusterIndex = clustering.getClusterIndex(agentInfo.getID());
-        Collection<StandardEntity> clusterEntities = clustering.getClusterEntities(clusterIndex);
-
-        List<Blockade> clusterBlockades = new ArrayList<>();
-        for (StandardEntity entity : clusterEntities) {
-            if (!(entity instanceof Road)) continue;
-            
-            Road road = (Road) entity;
-            if (!road.isBlockadesDefined()) continue;
-            
-            for (EntityID blockadeID : road.getBlockades()) {
-                StandardEntity blockadeEntity = worldInfo.getEntity(blockadeID);
-                if (blockadeEntity instanceof Blockade && isValidBlockade((Blockade) blockadeEntity)) {
-                    clusterBlockades.add((Blockade) blockadeEntity);
-                }
-            }
+private void detectUsingClustering() {
+        // 安全类型检查与转换
+        if (!(clustering instanceof KMeans)) {
+            selectPatrolPoint(); // 降级处理
+            return;
         }
 
-        if (!clusterBlockades.isEmpty()) {
-            EntityID myPosition = agentInfo.getPosition();
-            clusterBlockades.sort((b1, b2) -> {
-                double p1 = calculatePriority(myPosition, b1);
-                double p2 = calculatePriority(myPosition, b2);
-                return Double.compare(p2, p1);
+        KMeans kmeans = (KMeans) clustering; // 安全转换
+        kmeans.calc(); // 计算聚类
+
+        // 直接调用KMeans特有方法
+        Map<Integer, List<StandardEntity>> clusters = kmeans.getClusters();
+        int clusterIndex = kmeans.getClusterIndex(agentInfo.getID());
+
+        // ... 剩余逻辑保持不变 ...
+        List<Blockade> targetBlockades = searchBlockadesInCluster(clusters.get(clusterIndex));
+        
+        if (targetBlockades.isEmpty()) {
+            List<Integer> clusterIndices = new ArrayList<>(clusters.keySet());
+            clusterIndices.sort((i1, i2) -> {
+                StandardEntity center1 = kmeans.getClusterCenter(i1);
+                StandardEntity center2 = kmeans.getClusterCenter(i2);
+                double d1 = worldInfo.getDistance(agentInfo.getPosition(), center1.getID());
+                double d2 = worldInfo.getDistance(agentInfo.getPosition(), center2.getID());
+                return Double.compare(d1, d2);
             });
             
-            this.result = clusterBlockades.get(0).getPosition();
+            for (int index : clusterIndices) {
+                if (index == clusterIndex) continue;
+                targetBlockades = searchBlockadesInCluster(clusters.get(index));
+                if (!targetBlockades.isEmpty()) break;
+            }
+        }
+        
+        if (!targetBlockades.isEmpty()) {
+            targetBlockades.sort((b1, b2) -> {
+                double p1 = calculatePriority(agentInfo.getPosition(), b1);
+                double p2 = calculatePriority(agentInfo.getPosition(), b2);
+                return Double.compare(p2, p1);
+            });
+            this.result = targetBlockades.get(0).getPosition();
         } else {
-            // 聚类区域没有障碍物，选择最近的巡逻点
             selectPatrolPoint();
         }
     }
+
+private List<Blockade> searchBlockadesInCluster(List<StandardEntity> clusterEntities) {
+    List<Blockade> blockades = new ArrayList<>();
+    for (StandardEntity entity : clusterEntities) {
+        if (!(entity instanceof Road)) continue;
+        Road road = (Road) entity;
+        if (!road.isBlockadesDefined()) continue;
+        
+        for (EntityID blockadeID : road.getBlockades()) {
+            StandardEntity blockadeEntity = worldInfo.getEntity(blockadeID);
+            if (blockadeEntity instanceof Blockade && isValidBlockade((Blockade) blockadeEntity)) {
+                blockades.add((Blockade) blockadeEntity);
+            }
+        }
+    }
+    return blockades;
+}
     
     private void selectPatrolPoint() {
         EntityID myPosition = agentInfo.getPosition();
