@@ -1,11 +1,5 @@
 package sample_team.module.complex;
 
-import static rescuecore2.standard.entities.StandardEntityURN.AMBULANCE_TEAM;
-import static rescuecore2.standard.entities.StandardEntityURN.CIVILIAN;
-import static rescuecore2.standard.entities.StandardEntityURN.FIRE_BRIGADE;
-import static rescuecore2.standard.entities.StandardEntityURN.GAS_STATION;
-import static rescuecore2.standard.entities.StandardEntityURN.POLICE_FORCE;
-import static rescuecore2.standard.entities.StandardEntityURN.REFUGE;
 import adf.core.agent.communication.MessageManager;
 import adf.core.agent.develop.DevelopData;
 import adf.core.agent.info.AgentInfo;
@@ -13,154 +7,250 @@ import adf.core.agent.info.ScenarioInfo;
 import adf.core.agent.info.WorldInfo;
 import adf.core.agent.module.ModuleManager;
 import adf.core.component.module.algorithm.Clustering;
-import adf.core.component.module.algorithm.PathPlanning;
 import adf.core.component.module.complex.RoadDetector;
-import adf.core.debug.DefaultLogger;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import org.apache.log4j.Logger;
-import rescuecore2.standard.entities.Area;
-import rescuecore2.standard.entities.Human;
-import rescuecore2.standard.entities.StandardEntity;
-import rescuecore2.standard.entities.StandardEntityURN;
+import rescuecore2.standard.entities.*;
 import rescuecore2.worldmodel.EntityID;
+import java.util.*;
 
 public class SampleRoadDetector extends RoadDetector {
 
-  private Set<Area> openedAreas = new HashSet<>();
-  private Clustering clustering;
-  private PathPlanning pathPlanning;
+    private Clustering clustering;
+    private EntityID result;
+    private Map<EntityID, Integer> lastProcessedTime = new HashMap<>();
+    private int currentTime;
+    private Set<EntityID> visibleRoads = new HashSet<>();
 
-  private EntityID result;
-  private Logger logger;
-
-  public SampleRoadDetector(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager, DevelopData developData) {
-    super(ai, wi, si, moduleManager, developData);
-    logger = DefaultLogger.getLogger(agentInfo.me());
-    this.pathPlanning = moduleManager.getModule(
-        "SampleRoadDetector.PathPlanning",
-        "adf.impl.module.algorithm.DijkstraPathPlanning");
-    this.clustering = moduleManager.getModule("SampleRoadDetector.Clustering",
-        "adf.impl.module.algorithm.KMeansClustring");
-    registerModule(this.clustering);
-    registerModule(this.pathPlanning);
-    this.result = null;
-  }
-
-
-  @Override
-  public RoadDetector updateInfo(MessageManager messageManager) {
-    logger.debug("Time:" + agentInfo.getTime());
-    super.updateInfo(messageManager);
-    return this;
-  }
-
-
-  @Override
-  public RoadDetector calc() {
-    EntityID positionID = this.agentInfo.getPosition();
-    StandardEntity currentPosition = worldInfo.getEntity(positionID);
-    openedAreas.add((Area) currentPosition);
-    if (positionID.equals(result)) {
-      logger.debug("reach to " + currentPosition + " resetting target");
-      this.result = null;
+    public SampleRoadDetector(AgentInfo ai, WorldInfo wi, ScenarioInfo si,
+                            ModuleManager moduleManager, DevelopData developData) {
+        super(ai, wi, si, moduleManager, developData);
+        this.clustering = moduleManager.getModule(
+            "SampleRoadDetector.Clustering",
+            "adf.impl.module.algorithm.KMeansClustering");
     }
 
-    if (this.result == null) {
-      HashSet<Area> currentTargets = calcTargets();
-      logger.debug("Targets: " + currentTargets);
-      if (currentTargets.isEmpty()) {
-        this.result = null;
+    @Override
+    public SampleRoadDetector updateInfo(MessageManager messageManager) {
+        super.updateInfo(messageManager);
+        this.currentTime = agentInfo.getTime();
         return this;
-      }
-      this.pathPlanning.setFrom(positionID);
-      this.pathPlanning.setDestination(toEntityIds(currentTargets));
-      List<EntityID> path = this.pathPlanning.calc().getResult();
-      if (path != null && path.size() > 0) {
-        this.result = path.get(path.size() - 1);
-      }
-      logger.debug("Selected Target: " + this.result);
     }
-    return this;
-  }
 
+    @Override
+    public SampleRoadDetector calc() {
+        EntityID position = agentInfo.getPosition();
+        result = null;
+        visibleRoads.clear();
 
-  private Collection<EntityID>
-      toEntityIds(Collection<? extends StandardEntity> entities) {
-    ArrayList<EntityID> eids = new ArrayList<>();
-    for (StandardEntity standardEntity : entities) {
-      eids.add(standardEntity.getID());
+        // 1. 获取当前位置所在道路
+        StandardEntity currentArea = worldInfo.getEntity(position);
+        if (currentArea instanceof Area) {
+            visibleRoads.add(currentArea.getID());
+        }
+        
+        // 2. 获取视野范围内的道路
+        int viewDistance = calculateViewDistance();
+        Collection<StandardEntity> visibleEntities = worldInfo.getObjectsInRange(position, viewDistance);
+        
+        // 3. 筛选视野内的道路
+        for (StandardEntity entity : visibleEntities) {
+            if (entity instanceof Road) {
+                visibleRoads.add(entity.getID());
+            }
+        }
+        
+        // 4. 获取这些道路上的有效障碍物
+        List<Blockade> validBlockades = getVisibleBlockades();
+        
+        // 5. 按优先级排序并选择目标
+        if (!validBlockades.isEmpty()) {
+            prioritizeAndSelectTarget(position, validBlockades);
+        } 
+        // 6. 没有可见障碍物时使用聚类方法
+        else {
+            detectUsingClustering();
+        }
+        
+        // 7. 更新处理时间
+        if (result != null) {
+            lastProcessedTime.put(result, currentTime);
+        }
+        
+        return this;
     }
-    return eids;
-  }
 
-
-  private HashSet<Area> calcTargets() {
-    HashSet<Area> targetAreas = new HashSet<>();
-    for (StandardEntity e : this.worldInfo.getEntitiesOfType(REFUGE,
-        GAS_STATION)) {
-      targetAreas.add((Area) e);
+    // 计算实际视野距离
+    private int calculateViewDistance() {
+        return 30000; // 基础视野距离
     }
-    for (StandardEntity e : this.worldInfo.getEntitiesOfType(CIVILIAN,
-        AMBULANCE_TEAM, FIRE_BRIGADE, POLICE_FORCE)) {
-      if (isValidHuman(e)) {
-        Human h = (Human) e;
-        targetAreas.add((Area) worldInfo.getEntity(h.getPosition()));
-      }
+
+    // 获取视野内道路上的障碍物
+    private List<Blockade> getVisibleBlockades() {
+        List<Blockade> validBlockades = new ArrayList<>();
+        
+        for (EntityID roadId : visibleRoads) {
+            StandardEntity roadEntity = worldInfo.getEntity(roadId);
+            if (!(roadEntity instanceof Road)) continue;
+            
+            Road road = (Road) roadEntity;
+            if (!road.isBlockadesDefined()) continue;
+            
+            for (EntityID blockadeId : road.getBlockades()) {
+                StandardEntity entity = worldInfo.getEntity(blockadeId);
+                if (!(entity instanceof Blockade)) continue;
+                
+                Blockade blockade = (Blockade) entity;
+                if (isValidBlockade(blockade)) {
+                    validBlockades.add(blockade);
+                }
+            }
+        }
+        return validBlockades;
     }
-    HashSet<Area> inClusterTarget = filterInCluster(targetAreas);
-    inClusterTarget.removeAll(openedAreas);
-    return inClusterTarget;
-  }
 
-
-  private HashSet<Area> filterInCluster(HashSet<Area> targetAreas) {
-    int clusterIndex = clustering.getClusterIndex(this.agentInfo.getID());
-    HashSet<Area> clusterTargets = new HashSet<>();
-    HashSet<StandardEntity> inCluster = new HashSet<>(
-        clustering.getClusterEntities(clusterIndex));
-    for (Area target : targetAreas) {
-      if (inCluster.contains(target))
-        clusterTargets.add(target);
-
+    private void prioritizeAndSelectTarget(EntityID position, List<Blockade> blockades) {
+        // 按综合优先级排序（紧急度+距离）
+        blockades.sort((b1, b2) -> {
+            double priority1 = calculatePriority(position, b1);
+            double priority2 = calculatePriority(position, b2);
+            return Double.compare(priority2, priority1); // 降序
+        });
+        
+        // 选择最紧急的障碍物
+        this.result = blockades.get(0).getPosition();
     }
-    return clusterTargets;
-  }
 
+    private double calculatePriority(EntityID position, Blockade blockade) {
+        int cost = blockade.getRepairCost();
+        int distance = worldInfo.getDistance(position, blockade.getPosition());
+        
+        // 紧急度 = 修复成本 / 100
+        double severity = cost / 100.0;
+        
+        // 距离因子（近距离优先）
+        double distanceFactor = 1.0 + (1000.0 / (distance + 1));
+        
+        // 时间因子（超过30秒未处理提升优先级）
+        int lastProcessed = lastProcessedTime.getOrDefault(blockade.getPosition(), 0);
+        double timeFactor = (currentTime - lastProcessed > 30) ? 1.5 : 1.0;
+        
+        // 可见性因子（当前视野内优先级更高）
+        double visibilityFactor = (visibleRoads.contains(blockade.getPosition())) ? 1.5 : 1.0;
+        
+        // 人类紧急程度因子（HP低或被埋压严重的优先）
+        double humanEmergencyFactor = calculateHumanEmergencyFactor(blockade.getPosition());
+        
+        return severity * distanceFactor * timeFactor * visibilityFactor * humanEmergencyFactor;
+    }
 
-  @Override
-  public EntityID getTarget() {
-    return this.result;
-  }
+    // 计算道路位置的人类紧急程度
+    private double calculateHumanEmergencyFactor(EntityID position) {
+        double maxEmergency = 1.0; // 默认值
+        
+        // 获取该位置的所有人类（平民）
+        Collection<StandardEntity> humans = worldInfo.getEntitiesOfType(StandardEntityURN.CIVILIAN);
+        for (StandardEntity entity : humans) {
+            Human human = (Human) entity;
+            if (position.equals(human.getPosition())) {
+                // 计算人类紧急程度：HP越低紧急度越高，被埋压程度越高紧急度越高
+                int hp = human.isHPDefined() ? human.getHP() : 10000;
+                int buriedness = human.isBuriednessDefined() ? human.getBuriedness() : 0;
+                
+                // 紧急程度 = (10000 - HP) + buriedness * 2
+                double emergency = (10000 - hp) + (buriedness * 2);
+                if (emergency > maxEmergency) {
+                    maxEmergency = emergency;
+                }
+            }
+        }
+        
+        // 紧急程度因子 = 1.0 + emergency/100
+        return 1.0 + (maxEmergency / 10000.0);
+    }
 
+    private boolean isValidBlockade(Blockade blockade) {
+        // 基础有效性检查
+        if (!blockade.isRepairCostDefined() || blockade.getRepairCost() <= 0) {
+            return false;
+        }
+        
+        // 位置有效性检查
+        EntityID position = blockade.getPosition();
+        if (position == null) {
+            return false;
+        }
+        
+        // 检查是否已被处理
+        StandardEntity road = worldInfo.getEntity(position);
+        if (road instanceof Road) {
+            Road r = (Road) road;
+            if (r.isBlockadesDefined() && !r.getBlockades().contains(blockade.getID())) {
+                return false; // 障碍物已被清除
+            }
+        }
+        
+        return true;
+    }
 
-  private boolean isValidHuman(StandardEntity entity) {
-    if (entity == null)
-      return false;
-    if (!(entity instanceof Human))
-      return false;
+    private void detectUsingClustering() {
+        int clusterIndex = clustering.getClusterIndex(agentInfo.getID());
+        Collection<StandardEntity> clusterEntities = clustering.getClusterEntities(clusterIndex);
 
-    Human target = (Human) entity;
-    if (!target.isHPDefined() || target.getHP() == 0)
-      return false;
-    if (!target.isPositionDefined())
-      return false;
-    if (!target.isDamageDefined() || target.getDamage() == 0)
-      return false;
-    if (!target.isBuriednessDefined())
-      return false;
+        List<Blockade> clusterBlockades = new ArrayList<>();
+        for (StandardEntity entity : clusterEntities) {
+            if (!(entity instanceof Road)) continue;
+            
+            Road road = (Road) entity;
+            if (!road.isBlockadesDefined()) continue;
+            
+            for (EntityID blockadeID : road.getBlockades()) {
+                StandardEntity blockadeEntity = worldInfo.getEntity(blockadeID);
+                if (blockadeEntity instanceof Blockade && isValidBlockade((Blockade) blockadeEntity)) {
+                    clusterBlockades.add((Blockade) blockadeEntity);
+                }
+            }
+        }
 
-    StandardEntity position = worldInfo.getPosition(target);
-    if (position == null)
-      return false;
+        if (!clusterBlockades.isEmpty()) {
+            EntityID myPosition = agentInfo.getPosition();
+            clusterBlockades.sort((b1, b2) -> {
+                double p1 = calculatePriority(myPosition, b1);
+                double p2 = calculatePriority(myPosition, b2);
+                return Double.compare(p2, p1);
+            });
+            
+            this.result = clusterBlockades.get(0).getPosition();
+        } else {
+            // 聚类区域没有障碍物，选择最近的巡逻点
+            selectPatrolPoint();
+        }
+    }
+    
+    private void selectPatrolPoint() {
+        EntityID myPosition = agentInfo.getPosition();
+        List<Road> roads = new ArrayList<>();
+        
+        // 获取所有道路
+        for (StandardEntity entity : worldInfo.getEntitiesOfType(StandardEntityURN.ROAD)) {
+            if (entity instanceof Road) {
+                roads.add((Road) entity);
+            }
+        }
+        
+        if (!roads.isEmpty()) {
+            // 按距离排序
+            roads.sort((r1, r2) -> {
+                int d1 = worldInfo.getDistance(myPosition, r1.getID());
+                int d2 = worldInfo.getDistance(myPosition, r2.getID());
+                return Integer.compare(d1, d2);
+            });
+            
+            // 选择最近的道路作为巡逻点
+            this.result = roads.get(0).getID();
+        }
+    }
 
-    StandardEntityURN positionURN = position.getStandardURN();
-    if (positionURN == REFUGE || positionURN == AMBULANCE_TEAM)
-      return false;
-
-    return true;
-  }
+    @Override
+    public EntityID getTarget() {
+        return result;
+    }
 }
