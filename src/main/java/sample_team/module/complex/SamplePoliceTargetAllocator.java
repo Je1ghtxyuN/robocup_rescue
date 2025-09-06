@@ -229,8 +229,8 @@ public class SamplePoliceTargetAllocator extends PoliceTargetAllocator {
             }
         }
         
-        // 紧急程度因子 = 1.0 + maxEmergency/5000.0
-        return 1.0 + (maxEmergency / 5000.0);
+        // 紧急程度因子 = 1.0 + maxEmergency/2000.0
+        return 1.0 + (maxEmergency / 2000.0);
     }
     
     private boolean isUnreachable(EntityID policeID, EntityID target) {

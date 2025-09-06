@@ -41,36 +41,28 @@ public class PoliceRoadDetector extends RoadDetector {
         result = null;
         visibleRoads.clear();
 
-        // 1. 获取警察当前位置所在道路
         StandardEntity currentArea = worldInfo.getEntity(position);
         if (currentArea instanceof Area) {
             visibleRoads.add(currentArea.getID());
         }
         
-        // 2. 获取视野范围内的道路
         int viewDistance = calculateViewDistance();
         Collection<StandardEntity> visibleEntities = worldInfo.getObjectsInRange(position, viewDistance);
         
-        // 3. 筛选视野内的道路
         for (StandardEntity entity : visibleEntities) {
             if (entity instanceof Road) {
                 visibleRoads.add(entity.getID());
             }
         }
         
-        // 4. 获取这些道路上的有效障碍物
         List<Blockade> validBlockades = getVisibleBlockades();
         
-        // 5. 按优先级排序并选择目标
         if (!validBlockades.isEmpty()) {
             prioritizeAndSelectTarget(position, validBlockades);
-        } 
-        // 6. 没有可见障碍物时使用聚类方法
-        else {
+        } else {
             detectUsingClustering();
         }
         
-        // 7. 更新处理时间
         if (result != null) {
             lastProcessedTime.put(result, currentTime);
         }
@@ -78,12 +70,12 @@ public class PoliceRoadDetector extends RoadDetector {
         return this;
     }
 
-    // 计算警察实际视野距离
+    
+
     private int calculateViewDistance() {
-        return 30000; // 基础视野距离
+        return 30000;
     }
 
-    // 获取视野内道路上的障碍物
     private List<Blockade> getVisibleBlockades() {
         List<Blockade> validBlockades = new ArrayList<>();
         
@@ -100,6 +92,10 @@ public class PoliceRoadDetector extends RoadDetector {
                 
                 Blockade blockade = (Blockade) entity;
                 if (isValidBlockade(blockade)) {
+                    // 检查是否是救援路径上的关键障碍
+                    if (isCriticalForRescue(roadId)) {
+                        blockade.setRepairCost(blockade.getRepairCost() * 2); // 提高关键障碍的修复成本权重
+                    }
                     validBlockades.add(blockade);
                 }
             }
@@ -107,15 +103,45 @@ public class PoliceRoadDetector extends RoadDetector {
         return validBlockades;
     }
 
+    // 新增方法：检查是否是救援路径上的关键障碍
+    private boolean isCriticalForRescue(EntityID roadId) {
+        StandardEntity roadEntity = worldInfo.getEntity(roadId);
+        if (!(roadEntity instanceof Road)) return false;
+        
+        Road road = (Road) roadEntity;
+        
+        // 检查道路连接的建筑物
+        for (EntityID neighbor : road.getNeighbours()) {
+            StandardEntity neighborEntity = worldInfo.getEntity(neighbor);
+            if (neighborEntity instanceof Building) {
+                Building building = (Building) neighborEntity;
+                
+                // 如果建筑物有被困人员或着火
+                if (building.isOnFire() || worldInfo.getNumberOfBuried(building.getID()) > 0) {
+                    // 检查是否有救援队伍在附近但无法进入
+                    Collection<StandardEntity> nearbyRescuers = worldInfo.getObjectsInRange(roadId, 50000);
+                    for (StandardEntity rescuer : nearbyRescuers) {
+                        if (rescuer instanceof AmbulanceTeam || rescuer instanceof FireBrigade) {
+                            Human human = (Human) rescuer;
+                            if (human.getPosition().equals(roadId)) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
     private void prioritizeAndSelectTarget(EntityID position, List<Blockade> blockades) {
-        // 按综合优先级排序（紧急度+距离）
+        // 按综合优先级排序（紧急度+距离+救援关键性）
         blockades.sort((b1, b2) -> {
             double priority1 = calculatePriority(position, b1);
             double priority2 = calculatePriority(position, b2);
-            return Double.compare(priority2, priority1); // 降序
+            return Double.compare(priority2, priority1);
         });
         
-        // 选择最紧急的障碍物
         this.result = blockades.get(0).getPosition();
     }
 
@@ -123,39 +149,31 @@ public class PoliceRoadDetector extends RoadDetector {
         int cost = blockade.getRepairCost();
         int distance = worldInfo.getDistance(position, blockade.getPosition());
         
-        // 紧急度 = 修复成本 / 100
         double severity = cost / 100.0;
+        double distanceFactor = 0.5 + (1000.0 / (distance + 1));
         
-        // 距离因子（近距离优先）
-        double distanceFactor = 1.0 + (1000.0 / (distance + 1));
-        
-        // 时间因子（超过30秒未处理提升优先级）
         int lastProcessed = lastProcessedTime.getOrDefault(blockade.getPosition(), 0);
         double timeFactor = (currentTime - lastProcessed > 30) ? 1.5 : 1.0;
         
-        // 可见性因子（当前视野内优先级更高）
         double visibilityFactor = (visibleRoads.contains(blockade.getPosition())) ? 1.5 : 1.0;
         
-        // 新增：人类紧急程度因子（HP低或被埋压严重的优先）
         double humanEmergencyFactor = calculateHumanEmergencyFactor(blockade.getPosition());
         
-        return severity * distanceFactor * timeFactor * visibilityFactor * humanEmergencyFactor;
+        double rescueCriticalFactor = isCriticalForRescue(blockade.getPosition()) ? 4.0 : 1.0;
+        
+        return severity * distanceFactor * timeFactor * visibilityFactor * humanEmergencyFactor * rescueCriticalFactor;
     }
 
-    // 新增方法：计算道路位置的人类紧急程度
     private double calculateHumanEmergencyFactor(EntityID position) {
-        double maxEmergency = 1.0; // 默认值
+        double maxEmergency = 1.0;
         
-        // 获取该位置的所有人类（平民）
         Collection<StandardEntity> humans = worldInfo.getEntitiesOfType(StandardEntityURN.CIVILIAN);
         for (StandardEntity entity : humans) {
             Human human = (Human) entity;
             if (position.equals(human.getPosition())) {
-                // 计算人类紧急程度：HP越低紧急度越高，被埋压程度越高紧急度越高
                 int hp = human.isHPDefined() ? human.getHP() : 10000;
                 int buriedness = human.isBuriednessDefined() ? human.getBuriedness() : 0;
                 
-                // 紧急程度 = (10000 - HP) + buriedness * 10
                 double emergency = (10000 - hp) + (buriedness * 10);
                 if (emergency > maxEmergency) {
                     maxEmergency = emergency;
@@ -163,28 +181,24 @@ public class PoliceRoadDetector extends RoadDetector {
             }
         }
         
-        // 紧急程度因子 = 1.0 + emergency/100
-        return 1.0 + (maxEmergency / 10000.0);
+        return 1.0 + (maxEmergency / 2000.0);
     }
 
     private boolean isValidBlockade(Blockade blockade) {
-        // 基础有效性检查
         if (!blockade.isRepairCostDefined() || blockade.getRepairCost() <= 0) {
             return false;
         }
         
-        // 位置有效性检查
         EntityID position = blockade.getPosition();
         if (position == null) {
             return false;
         }
         
-        // 检查是否已被处理
         StandardEntity road = worldInfo.getEntity(position);
         if (road instanceof Road) {
             Road r = (Road) road;
             if (r.isBlockadesDefined() && !r.getBlockades().contains(blockade.getID())) {
-                return false; // 障碍物已被清除
+                return false;
             }
         }
         
@@ -220,7 +234,6 @@ public class PoliceRoadDetector extends RoadDetector {
             
             this.result = clusterBlockades.get(0).getPosition();
         } else {
-            // 聚类区域没有障碍物，选择最近的巡逻点
             selectPatrolPoint();
         }
     }
@@ -229,7 +242,6 @@ public class PoliceRoadDetector extends RoadDetector {
         EntityID myPosition = agentInfo.getPosition();
         List<Road> roads = new ArrayList<>();
         
-        // 获取所有道路
         for (StandardEntity entity : worldInfo.getEntitiesOfType(StandardEntityURN.ROAD)) {
             if (entity instanceof Road) {
                 roads.add((Road) entity);
@@ -237,14 +249,12 @@ public class PoliceRoadDetector extends RoadDetector {
         }
         
         if (!roads.isEmpty()) {
-            // 按距离排序
             roads.sort((r1, r2) -> {
                 int d1 = worldInfo.getDistance(myPosition, r1.getID());
                 int d2 = worldInfo.getDistance(myPosition, r2.getID());
                 return Integer.compare(d1, d2);
             });
             
-            // 选择最近的道路作为巡逻点
             this.result = roads.get(0).getID();
         }
     }

@@ -28,6 +28,7 @@ public class PoliceAStarPathPlanning extends PathPlanning {
     private int bestDirection = -1;
     private EntityID bestPosition;
     private Map<EntityID, Integer> directionCache = new HashMap<>();
+    private Map<EntityID, Double> rescuePriorityCache = new HashMap<>();
 
     public PoliceAStarPathPlanning(AgentInfo ai, WorldInfo wi, ScenarioInfo si, 
                                  ModuleManager moduleManager, DevelopData developData) {
@@ -73,12 +74,10 @@ public class PoliceAStarPathPlanning extends PathPlanning {
         return this.result;
     }
     
-    // 新增方法：获取最佳清理方向
     public int getBestDirection() {
         return this.bestDirection;
     }
     
-    // 新增方法：获取最佳清理位置
     public EntityID getBestPosition() {
         return this.bestPosition;
     }
@@ -115,31 +114,25 @@ public class PoliceAStarPathPlanning extends PathPlanning {
 
     @Override
     public PathPlanning calc() {
-        // 重置方向优化字段
         this.bestDirection = -1;
         this.bestPosition = null;
         
-        // 1. 如果目标为空，返回空路径
         if (targets == null || targets.isEmpty()) {
             this.result = Collections.emptyList();
             return this;
         }
         
-        // 2. 如果当前位置就是目标，直接返回当前位置
         if (targets.contains(from)) {
             this.result = Collections.singletonList(from);
             this.bestPosition = from;
-            // 计算并缓存方向
             this.bestDirection = calculateOptimalDirection(from);
             return this;
         }
         
-        // 3. 执行A*算法
         List<EntityID> open = new LinkedList<>();
         List<EntityID> close = new LinkedList<>();
         Map<EntityID, Node> nodeMap = new HashMap<>();
         
-        // 4. 初始化
         open.add(this.from);
         nodeMap.put(this.from, new Node(null, this.from));
         close.clear();
@@ -148,38 +141,29 @@ public class PoliceAStarPathPlanning extends PathPlanning {
         boolean foundPath = false;
         
         while (!open.isEmpty()) {
-            // 5. 获取开放列表中最优节点
             Node current = getBestNode(open, nodeMap);
             EntityID currentId = current.getID();
             
-            // 6. 检查是否到达目标
             if (targets.contains(currentId)) {
                 actualTarget = currentId;
                 foundPath = true;
                 break;
             }
             
-            // 7. 移动当前节点到关闭列表
             open.remove(currentId);
             close.add(currentId);
             
-            // 8. 处理邻居节点
             processNeighbors(current, open, close, nodeMap);
         }
         
-        // 9. 构建结果路径
         if (foundPath && actualTarget != null) {
             buildPath(nodeMap, actualTarget);
-            // 计算并缓存最佳方向
             this.bestDirection = calculateOptimalDirection(actualTarget);
             this.bestPosition = actualTarget;
-        } 
-        // 10. 如果没有找到路径，尝试寻找次优路径
-        else {
+        } else {
             findFallbackPath(open, close, nodeMap);
         }
         
-        // 11. 添加当前位置（如果路径为空）
         if (result == null || result.isEmpty()) {
             result = Collections.singletonList(from);
             this.bestPosition = from;
@@ -189,19 +173,56 @@ public class PoliceAStarPathPlanning extends PathPlanning {
         return this;
     }
     
-    // 新增方法：计算最佳清理方向（核心优化）
+    // 新增方法：计算救援优先级
+    private double calculateRescuePriority(EntityID roadId) {
+        if (rescuePriorityCache.containsKey(roadId)) {
+            return rescuePriorityCache.get(roadId);
+        }
+        
+        double priority = 0.0;
+        StandardEntity roadEntity = worldInfo.getEntity(roadId);
+        if (!(roadEntity instanceof Road)) {
+            return 0.0;
+        }
+        
+        Road road = (Road) roadEntity;
+        
+        // 检查道路连接的建筑物
+        for (EntityID neighbor : road.getNeighbours()) {
+            StandardEntity neighborEntity = worldInfo.getEntity(neighbor);
+            if (neighborEntity instanceof Building) {
+                Building building = (Building) neighborEntity;
+                
+                // 如果建筑物有被困人员，增加优先级
+                if (building.isOnFire() || worldInfo.getNumberOfBuried(building.getID()) > 0) {
+                    priority += 2.0;
+                    
+                    // 检查是否有救援队伍在附近但无法进入
+                    Collection<StandardEntity> nearbyRescuers = worldInfo.getObjectsInRange(roadId, 50000);
+                    for (StandardEntity rescuer : nearbyRescuers) {
+                        if (rescuer instanceof AmbulanceTeam || rescuer instanceof FireBrigade) {
+                            priority += 1.5;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        
+        rescuePriorityCache.put(roadId, priority);
+        return priority;
+    }
+    
     private int calculateOptimalDirection(EntityID targetPosition) {
-        // 检查缓存
         if (directionCache.containsKey(targetPosition)) {
             return directionCache.get(targetPosition);
         }
         
         Blockade blockade = blockadeInfo.get(targetPosition);
         if (blockade == null || !blockade.isApexesDefined()) {
-            return -1; // 无效方向
+            return -1;
         }
         
-        // 计算障碍物中心点
         int[] apexes = blockade.getApexes();
         int centerX = 0, centerY = 0;
         for (int i = 0; i < apexes.length; i += 2) {
@@ -211,21 +232,17 @@ public class PoliceAStarPathPlanning extends PathPlanning {
         centerX /= (apexes.length / 2);
         centerY /= (apexes.length / 2);
         
-        // 获取道路中心位置
         Pair<Integer, Integer> roadPos = worldInfo.getLocation(targetPosition);
         if (roadPos == null) return -1;
         
-        // 计算方向向量
         int dx = centerX - roadPos.first();
         int dy = centerY - roadPos.second();
         
-        // 计算角度（0-360度）
         double angle = Math.toDegrees(Math.atan2(dy, dx));
         if (angle < 0) angle += 360;
         
         int direction = (int) Math.round(angle);
         
-        // 缓存结果
         directionCache.put(targetPosition, direction);
         return direction;
     }
@@ -248,16 +265,12 @@ public class PoliceAStarPathPlanning extends PathPlanning {
         if (neighbors == null) return;
         
         for (EntityID neighborId : neighbors) {
-            // 跳过已经在关闭列表中的节点
             if (close.contains(neighborId)) continue;
             
-            // 计算新路径成本
             double newCost = current.getCost() + calculateMoveCost(currentId, neighborId);
             Node neighborNode = nodeMap.get(neighborId);
             
-            // 如果邻居节点不在开放列表中，或者新路径更好
             if (neighborNode == null || newCost < neighborNode.getCost()) {
-                // 创建/更新节点
                 if (neighborNode == null) {
                     neighborNode = new Node(currentId, neighborId);
                     nodeMap.put(neighborId, neighborNode);
@@ -267,26 +280,32 @@ public class PoliceAStarPathPlanning extends PathPlanning {
                     neighborNode.setCost(newCost);
                 }
                 
-                // 更新启发式值
                 neighborNode.updateHeuristic(targets, worldInfo);
             }
         }
     }
     
     private double calculateMoveCost(EntityID from, EntityID to) {
-        // 基础移动成本
         double cost = worldInfo.getDistance(from, to);
         
-        // 增加障碍物的移动成本（鼓励清理障碍）
+        // 获取救援优先级
+        double rescuePriority = calculateRescuePriority(to);
+        
         Blockade blockade = blockadeInfo.get(to);
         if (blockade != null && blockade.isRepairCostDefined()) {
-            // 障碍物修复成本越高，移动成本越高（鼓励优先清除）
-            cost += blockade.getRepairCost() * 0.5;
+            // 根据救援优先级调整障碍物修复成本
+            double repairCost = blockade.getRepairCost();
+            if (rescuePriority > 1.0) {
+                // 高优先级区域，降低移动成本以鼓励清理
+                cost += repairCost * 0.3;
+            } else {
+                // 低优先级区域，增加移动成本以抑制清理
+                cost += repairCost * 0.8;
+            }
         }
 
-        // 增加警察负担成本（避免过多警察聚集）
         int nearbyPolice = countNearbyPolice(to);
-        cost += nearbyPolice * 20.0; // 每个附近警察增加20点成本
+        cost += nearbyPolice * 20.0;
         
         return cost;
     }
@@ -299,9 +318,8 @@ public class PoliceAStarPathPlanning extends PathPlanning {
                 count++;
             }
         }
-        return Math.max(0, count - 1); // 不包括自己
+        return Math.max(0, count - 1);
     }
-
     
     private void buildPath(Map<EntityID, Node> nodeMap, EntityID target) {
         List<EntityID> path = new LinkedList<>();
@@ -317,28 +335,22 @@ public class PoliceAStarPathPlanning extends PathPlanning {
     
     private void findFallbackPath(List<EntityID> open, List<EntityID> close, 
                                  Map<EntityID, Node> nodeMap) {
-        // 尝试1：从开放列表中寻找最近目标的节点
         EntityID fallbackTarget = findNearestTargetInOpen(open, nodeMap);
         
-        // 尝试2：如果开放列表中没有合适目标，从关闭列表中寻找
         if (fallbackTarget == null) {
             fallbackTarget = findNearestTargetInClose(close, nodeMap);
         }
         
-        // 尝试3：如果还是找不到，选择最近的可见邻居
         if (fallbackTarget == null) {
             fallbackTarget = findReachableVisibleNeighbor(from);
         }
         
-        // 尝试4：选择最近的邻居
         if (fallbackTarget == null) {
             fallbackTarget = findNearestNeighbor();
         }
         
-        // 构建回退路径
         if (fallbackTarget != null) {
             buildPath(nodeMap, fallbackTarget);
-            // 计算并缓存方向
             this.bestDirection = calculateOptimalDirection(fallbackTarget);
             this.bestPosition = fallbackTarget;
         } else {
@@ -347,9 +359,8 @@ public class PoliceAStarPathPlanning extends PathPlanning {
         }
     }
     
-    // 新增方法：查找可达的可见邻居
     private EntityID findReachableVisibleNeighbor(EntityID position) {
-        int viewDistance = 50000; // 50米视野范围
+        int viewDistance = 50000;
         Collection<StandardEntity> visibleEntities = worldInfo.getObjectsInRange(position, viewDistance);
         
         EntityID bestNeighbor = null;
@@ -360,10 +371,8 @@ public class PoliceAStarPathPlanning extends PathPlanning {
                 Road road = (Road) entity;
                 EntityID roadID = road.getID();
                 
-                // 跳过当前位置
                 if (roadID.equals(position)) continue;
                 
-                // 检查是否可达
                 double distance = worldInfo.getDistance(position, roadID);
                 if (distance < minDistance && distance > 0) {
                     minDistance = distance;
@@ -423,7 +432,6 @@ public class PoliceAStarPathPlanning extends PathPlanning {
         return best;
     }
 
-    // Node 内部类（已存在）
     private class Node {
         private EntityID id;
         private EntityID parent;
@@ -434,14 +442,12 @@ public class PoliceAStarPathPlanning extends PathPlanning {
             this.id = id;
             this.parent = parent;
             
-            // 计算初始成本
             if (parent == null) {
                 this.cost = 0;
             } else {
                 this.cost = worldInfo.getDistance(parent, id);
             }
             
-            // 计算初始启发式值
             updateHeuristic(null, worldInfo);
         }
 
@@ -451,7 +457,6 @@ public class PoliceAStarPathPlanning extends PathPlanning {
                 return;
             }
             
-            // 计算到最近目标的距离
             double minDistance = Double.MAX_VALUE;
             for (EntityID target : targets) {
                 double distance = worldInfo.getDistance(id, target);
@@ -460,11 +465,12 @@ public class PoliceAStarPathPlanning extends PathPlanning {
                 }
             }
             
-            // 添加目标价值启发式（鼓励选择高价值目标）
             double valueHeuristic = 0;
             Blockade blockade = blockadeInfo.get(id);
             if (blockade != null && blockade.isRepairCostDefined()) {
-                valueHeuristic = 1000.0 / (blockade.getRepairCost() + 1); // 修复成本越高，价值越高
+                // 考虑救援优先级
+                double rescuePriority = calculateRescuePriority(id);
+                valueHeuristic = 1000.0 / (blockade.getRepairCost() + 1) * (1 + rescuePriority);
             }
             
             this.heuristic = minDistance - valueHeuristic;
