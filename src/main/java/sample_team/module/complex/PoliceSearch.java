@@ -31,6 +31,9 @@ public class PoliceSearch extends Search {
     private static final int STUCK_TIME_THRESHOLD = 60;
     private static final int MAX_STUCK_COUNT = 5;
 
+    private Map<EntityID, Integer> roadLastProcessedTime = new HashMap<>();
+    private int currentTime;
+
     public PoliceSearch(AgentInfo ai, WorldInfo wi, ScenarioInfo si,
                        ModuleManager moduleManager, DevelopData developData) {
         super(ai, wi, si, moduleManager, developData);
@@ -53,6 +56,7 @@ public class PoliceSearch extends Search {
     @Override
     public PoliceSearch updateInfo(MessageManager messageManager) {
         super.updateInfo(messageManager);
+        currentTime = agentInfo.getTime();  
         if (pathPlanning != null) {
             pathPlanning.updateInfo(messageManager);
         }
@@ -73,6 +77,8 @@ public class PoliceSearch extends Search {
 
     @Override
     public PoliceSearch calc() {
+        currentTime = agentInfo.getTime();
+
         if (!initialized) {
             initialize(moduleManager);
         }
@@ -98,6 +104,11 @@ public class PoliceSearch extends Search {
         }
         
         return this;
+    }
+
+     // 道路访问时间更新方法
+    private void updateRoadProcessedTime(EntityID roadId) {
+        roadLastProcessedTime.put(roadId, currentTime);
     }
 
     private List<Blockade> prioritizeRescueAreas(List<Blockade> blockades) {
@@ -222,6 +233,7 @@ public class PoliceSearch extends Search {
             if (isPathValid(pathPlanning.getResult())) {
                 result = roadID;
                 lastTarget = roadID;
+                updateRoadProcessedTime(roadID);
                 
                 lockedTarget = roadID;
                 lockExpiryTime = agentInfo.getTime() + 30;
@@ -333,29 +345,106 @@ public class PoliceSearch extends Search {
     }
 
     private void patrolRegionRoad() {
+        // 1. 优先选择救援热点区域
         EntityID hotspot = findRescueHotspot();
         if (hotspot != null) {
             result = hotspot;
-            lastTarget = result;
+            updateRoadProcessedTime(result);
             return;
         }
         
-        if (clustering == null) {
-            patrolRandomRoad();
+         // 2. 选择集群内未探索区域
+        if (clustering != null) {
+            int clusterIndex = clustering.getClusterIndex(agentInfo.getID());
+            Collection<StandardEntity> clusterEntities = clustering.getClusterEntities(clusterIndex);
+            List<EntityID> unexplored = getUnexploredRoads(clusterEntities);
+            
+            if (!unexplored.isEmpty()) {
+                result = unexplored.get(new Random().nextInt(unexplored.size()));
+                updateRoadProcessedTime(result);
+                return;
+            }
+        }
+
+        // 3. 全局搜索高优先级区域
+        List<EntityID> highPriorityRoads = findHighPriorityRoads();
+        if (!highPriorityRoads.isEmpty()) {
+            result = highPriorityRoads.get(0);
+            updateRoadProcessedTime(result);
             return;
         }
         
-        int clusterIndex = clustering.getClusterIndex(agentInfo.getID());
-        Collection<StandardEntity> clusterEntities = clustering.getClusterEntities(clusterIndex);
+        // 4. 最后选择随机道路
+        patrolRandomRoad();
+    }
+
+    // 获取未探索道路
+    private List<EntityID> getUnexploredRoads(Collection<StandardEntity> entities) {
+        List<EntityID> unexplored = new ArrayList<>();
         
-        List<EntityID> reachableRoads = getReachableRoads(clusterEntities);
-        
-        if (!reachableRoads.isEmpty()) {
-            result = reachableRoads.get(new Random().nextInt(reachableRoads.size()));
-            lastTarget = result;
-        } else {
-            patrolRandomRoad();
+        for (StandardEntity entity : entities) {
+            if (entity instanceof Road) {
+                Road road = (Road) entity;
+                EntityID roadId = road.getID();
+
+                // 获取最后处理时间（如果不存在则为0）
+                int lastProcessed = roadLastProcessedTime.getOrDefault(roadId, 0);
+                
+                // 最近30秒内未被访问
+                if (lastProcessed < currentTime - 30) {
+                    unexplored.add(roadId);
+                }
+            }
         }
+        return unexplored;
+    }
+
+    // 查找高优先级道路
+    private List<EntityID> findHighPriorityRoads() {
+        List<EntityID> highPriority = new ArrayList<>();
+        
+        for (StandardEntity entity : worldInfo.getEntitiesOfType(StandardEntityURN.ROAD)) {
+            if (!(entity instanceof Road)) continue;
+            Road road = (Road) entity;
+            
+            // 根据连接建筑物状态计算优先级
+            double priority = calculateRoadPriority(road);
+            
+            if (priority > 2.0) { // 高优先级阈值
+                highPriority.add(road.getID());
+            }
+        }
+        
+        // 按优先级降序排序
+        highPriority.sort((id1, id2) -> 
+            Double.compare(calculateRoadPriority((Road)worldInfo.getEntity(id2)), 
+                        calculateRoadPriority((Road)worldInfo.getEntity(id1))));
+        return highPriority;
+    }
+
+    // 计算道路优先级
+    private double calculateRoadPriority(Road road) {
+        double priority = 0.0;
+        
+        // 连接建筑物的紧急程度
+        for (EntityID neighbor : road.getNeighbours()) {
+            StandardEntity entity = worldInfo.getEntity(neighbor);
+            if (entity instanceof Building) {
+                Building building = (Building) entity;
+                if (building.isOnFire()) priority += 1.5;
+                if (worldInfo.getNumberOfBuried(building.getID()) > 0) priority += 2.0;
+            }
+        }
+        
+        // 附近救援队伍数量
+        Collection<StandardEntity> rescuers = worldInfo.getObjectsInRange(road.getID(), 50000);
+        for (StandardEntity rescuer : rescuers) {
+            if (rescuer instanceof AmbulanceTeam || rescuer instanceof FireBrigade) {
+                priority += 0.5;
+            }
+        }
+        
+        return priority;
     }
     
     private EntityID findRescueHotspot() {

@@ -109,31 +109,79 @@ public class PoliceRoadDetector extends RoadDetector {
         if (!(roadEntity instanceof Road)) return false;
         
         Road road = (Road) roadEntity;
+        int criticalCount = 0;
         
         // 检查道路连接的建筑物
         for (EntityID neighbor : road.getNeighbours()) {
             StandardEntity neighborEntity = worldInfo.getEntity(neighbor);
             if (neighborEntity instanceof Building) {
                 Building building = (Building) neighborEntity;
+                // 关键性因素1：建筑物有被困人员
+                boolean hasBuried = worldInfo.getNumberOfBuried(building.getID()) > 0;
+                // 关键性因素2：建筑物着火
+                boolean isBurning = building.isOnFire();
+                // 关键性因素3：唯一入口检查
+                boolean isOnlyAccess = isOnlyAccessPoint(neighbor, roadId);
+                // 关键性因素4：附近有救援队伍被阻挡
+                boolean hasBlockedRescuers = hasBlockedRescuers(roadId);
+            
+                if (hasBuried || isBurning || isOnlyAccess || hasBlockedRescuers) {
+                criticalCount++;
                 
-                // 如果建筑物有被困人员或着火
-                if (building.isOnFire() || worldInfo.getNumberOfBuried(building.getID()) > 0) {
-                    // 检查是否有救援队伍在附近但无法进入
-                    Collection<StandardEntity> nearbyRescuers = worldInfo.getObjectsInRange(roadId, 50000);
-                    for (StandardEntity rescuer : nearbyRescuers) {
-                        if (rescuer instanceof AmbulanceTeam || rescuer instanceof FireBrigade) {
-                            Human human = (Human) rescuer;
-                            if (human.getPosition().equals(roadId)) {
-                                return true;
-                            }
-                        }
-                    }
+                // 特别紧急情况：有救援队伍被阻挡且建筑物有人
+                if (hasBlockedRescuers && (hasBuried || isBurning)) {
+                    return true; // 最高优先级
+                }
+            }
+            }
+        }
+        return criticalCount > 1;
+    }
+
+    // 检查是否是建筑物的唯一入口
+    private boolean isOnlyAccessPoint(EntityID buildingId, EntityID roadId) {
+        Building building = (Building) worldInfo.getEntity(buildingId);
+        int accessPoints = 0;
+        
+        for (EntityID neighbor : building.getNeighbours()) {
+            if (worldInfo.getEntity(neighbor) instanceof Road) {
+                accessPoints++;
+            }
+        }
+        return accessPoints == 1; // 只有一条连接道路
+    }
+
+    // 检查是否有救援队伍被阻挡
+    private boolean hasBlockedRescuers(EntityID roadId) {
+        Collection<StandardEntity> nearbyRescuers = worldInfo.getObjectsInRange(roadId, 30000);
+        int blockedCount = 0;
+        
+        for (StandardEntity entity : nearbyRescuers) {
+            if ((entity instanceof AmbulanceTeam || entity instanceof FireBrigade)) {
+                Human human = (Human) entity;
+                // 检查救援队伍是否停滞
+                if (isAgentStuck(human.getID())) {
+                    blockedCount++;
                 }
             }
         }
-        return false;
+        return blockedCount > 0;
     }
 
+    // 判断智能体是否停滞
+    private boolean isAgentStuck(EntityID agentId) {
+        Human agent = (Human) worldInfo.getEntity(agentId);
+        if (!agent.isPositionDefined()) return false;
+        
+        // 获取位置历史（ADF扩展接口）
+        int[] history = agent.getPositionHistory();
+        if (history == null || history.length < 3) return false;
+        
+        // 检查最近3个时间点位置是否相同
+        return history[history.length-1] == history[history.length-2] && 
+            history[history.length-2] == history[history.length-3];
+    }
+    
     private void prioritizeAndSelectTarget(EntityID position, List<Blockade> blockades) {
         // 按综合优先级排序（紧急度+距离+救援关键性）
         blockades.sort((b1, b2) -> {

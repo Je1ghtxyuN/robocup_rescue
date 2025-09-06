@@ -11,24 +11,19 @@ import rescuecore2.misc.collections.LazyMap;
 import rescuecore2.standard.entities.*;
 import rescuecore2.worldmodel.Entity;
 import rescuecore2.worldmodel.EntityID;
-import rescuecore2.misc.Pair;
 
 import java.util.*;
 
 public class PoliceAStarPathPlanning extends PathPlanning {
 
     private Map<EntityID, Set<EntityID>> graph;
-    private Map<EntityID, Blockade> blockadeInfo = new HashMap<>();
+    private Map<EntityID, Integer> blockadeCostMap; // 存储每条道路的总障碍物修复成本
     private EntityID from;
     private Collection<EntityID> targets;
     private List<EntityID> result;
     private WorldInfo worldInfo;
-    
-    // 新增方向优化字段
-    private int bestDirection = -1;
-    private EntityID bestPosition;
-    private Map<EntityID, Integer> directionCache = new HashMap<>();
-    private Map<EntityID, Double> rescuePriorityCache = new HashMap<>();
+   
+    private Map<EntityID, Double> rescuePriorityCache = new HashMap<>();// 救援优先级缓存
 
     public PoliceAStarPathPlanning(AgentInfo ai, WorldInfo wi, ScenarioInfo si, 
                                  ModuleManager moduleManager, DevelopData developData) {
@@ -36,6 +31,28 @@ public class PoliceAStarPathPlanning extends PathPlanning {
         this.agentInfo = ai;
         this.worldInfo = wi;
         this.init();
+    }
+
+    private void initBlockadeCostMap() {
+        blockadeCostMap.clear();
+        for (Entity next : this.worldInfo) {
+            if (next instanceof Road) {
+                Road road = (Road) next;
+                int totalRepairCost = 0;
+                if (road.isBlockadesDefined()) {
+                    for (EntityID blockadeID : road.getBlockades()) {
+                        StandardEntity entity = worldInfo.getEntity(blockadeID);
+                        if (entity instanceof Blockade) {
+                            Blockade blockade = (Blockade) entity;
+                            if (blockade.isRepairCostDefined()) {
+                                totalRepairCost += blockade.getRepairCost();
+                            }
+                        }
+                    }
+                }
+                blockadeCostMap.put(road.getID(), totalRepairCost);
+            }
+        }
     }
 
     private void init() {
@@ -51,19 +68,21 @@ public class PoliceAStarPathPlanning extends PathPlanning {
             if (next instanceof Road) {
                 Road road = (Road) next;
                 Set<EntityID> roadNeighbours = new HashSet<>(road.getNeighbours());
-                
-                // 处理障碍物信息
+                neighbours.put(road.getID(), roadNeighbours);
+                // 计算该道路的总障碍物修复成本
+                int totalRepairCost = 0;
                 if (road.isBlockadesDefined()) {
                     for (EntityID blockadeID : road.getBlockades()) {
                         StandardEntity entity = worldInfo.getEntity(blockadeID);
                         if (entity instanceof Blockade) {
                             Blockade blockade = (Blockade) entity;
-                            blockadeInfo.put(road.getID(), blockade);
+                            if (blockade.isRepairCostDefined()) {
+                                totalRepairCost += blockade.getRepairCost();
+                            }
                         }
                     }
                 }
-                
-                neighbours.put(road.getID(), roadNeighbours);
+                blockadeCostMap.put(road.getID(),totalRepairCost);
             }
         }
         this.graph = neighbours;
@@ -72,14 +91,6 @@ public class PoliceAStarPathPlanning extends PathPlanning {
     @Override
     public List<EntityID> getResult() {
         return this.result;
-    }
-    
-    public int getBestDirection() {
-        return this.bestDirection;
-    }
-    
-    public EntityID getBestPosition() {
-        return this.bestPosition;
     }
 
     @Override
@@ -97,12 +108,58 @@ public class PoliceAStarPathPlanning extends PathPlanning {
     @Override
     public PathPlanning precompute(PrecomputeData precomputeData) {
         super.precompute(precomputeData);
+        
+       // 将道路图转换为自定义字符串格式
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<EntityID, Set<EntityID>> entry : graph.entrySet()) {
+            sb.append(entry.getKey().getValue()).append(":");
+            for (EntityID neighbor : entry.getValue()) {
+                sb.append(neighbor.getValue()).append(",");
+            }
+            sb.append(";");
+        }
+        precomputeData.setString("road_graph", sb.toString());
+
         return this;
     }
 
     @Override
     public PathPlanning resume(PrecomputeData precomputeData) {
         super.resume(precomputeData);
+        // 从自定义字符串恢复道路图
+        String graphStr = precomputeData.getString("road_graph");
+        if (graphStr != null) {
+            try {
+                Map<EntityID, Set<EntityID>> newGraph = new HashMap<>();
+                String[] entries = graphStr.split(";");
+                for (String entry : entries) {
+                    if (entry.isEmpty()) continue;
+                    
+                    String[] parts = entry.split(":");
+                    EntityID roadId = new EntityID(Integer.parseInt(parts[0]));
+                    
+                    Set<EntityID> neighbors = new HashSet<>();
+                    if (parts.length > 1) {
+                        for (String neighborId : parts[1].split(",")) {
+                            if (!neighborId.isEmpty()) {
+                                neighbors.add(new EntityID(Integer.parseInt(neighborId)));
+                            }
+                        }
+                    }
+                    
+                    newGraph.put(roadId, neighbors);
+                }
+                this.graph = newGraph;
+            } catch (Exception e) {
+                // 解析失败，回退到重新初始化
+                init();
+            }
+        } else {
+            // 没有预计算数据，重新初始化
+            init();
+        }
+        // 初始化障碍物成本映射
+        initBlockadeCostMap();
         return this;
     }
 
@@ -114,8 +171,8 @@ public class PoliceAStarPathPlanning extends PathPlanning {
 
     @Override
     public PathPlanning calc() {
-        this.bestDirection = -1;
-        this.bestPosition = null;
+        // 清空缓存
+        rescuePriorityCache.clear();
         
         if (targets == null || targets.isEmpty()) {
             this.result = Collections.emptyList();
@@ -124,8 +181,6 @@ public class PoliceAStarPathPlanning extends PathPlanning {
         
         if (targets.contains(from)) {
             this.result = Collections.singletonList(from);
-            this.bestPosition = from;
-            this.bestDirection = calculateOptimalDirection(from);
             return this;
         }
         
@@ -158,22 +213,18 @@ public class PoliceAStarPathPlanning extends PathPlanning {
         
         if (foundPath && actualTarget != null) {
             buildPath(nodeMap, actualTarget);
-            this.bestDirection = calculateOptimalDirection(actualTarget);
-            this.bestPosition = actualTarget;
         } else {
             findFallbackPath(open, close, nodeMap);
         }
         
         if (result == null || result.isEmpty()) {
             result = Collections.singletonList(from);
-            this.bestPosition = from;
-            this.bestDirection = calculateOptimalDirection(from);
         }
         
         return this;
     }
     
-    // 新增方法：计算救援优先级
+    // 计算救援优先级
     private double calculateRescuePriority(EntityID roadId) {
         if (rescuePriorityCache.containsKey(roadId)) {
             return rescuePriorityCache.get(roadId);
@@ -211,40 +262,6 @@ public class PoliceAStarPathPlanning extends PathPlanning {
         
         rescuePriorityCache.put(roadId, priority);
         return priority;
-    }
-    
-    private int calculateOptimalDirection(EntityID targetPosition) {
-        if (directionCache.containsKey(targetPosition)) {
-            return directionCache.get(targetPosition);
-        }
-        
-        Blockade blockade = blockadeInfo.get(targetPosition);
-        if (blockade == null || !blockade.isApexesDefined()) {
-            return -1;
-        }
-        
-        int[] apexes = blockade.getApexes();
-        int centerX = 0, centerY = 0;
-        for (int i = 0; i < apexes.length; i += 2) {
-            centerX += apexes[i];
-            centerY += apexes[i + 1];
-        }
-        centerX /= (apexes.length / 2);
-        centerY /= (apexes.length / 2);
-        
-        Pair<Integer, Integer> roadPos = worldInfo.getLocation(targetPosition);
-        if (roadPos == null) return -1;
-        
-        int dx = centerX - roadPos.first();
-        int dy = centerY - roadPos.second();
-        
-        double angle = Math.toDegrees(Math.atan2(dy, dx));
-        if (angle < 0) angle += 360;
-        
-        int direction = (int) Math.round(angle);
-        
-        directionCache.put(targetPosition, direction);
-        return direction;
     }
     
     private Node getBestNode(List<EntityID> open, Map<EntityID, Node> nodeMap) {
@@ -291,16 +308,16 @@ public class PoliceAStarPathPlanning extends PathPlanning {
         // 获取救援优先级
         double rescuePriority = calculateRescuePriority(to);
         
-        Blockade blockade = blockadeInfo.get(to);
-        if (blockade != null && blockade.isRepairCostDefined()) {
+        // 获取该道路的总障碍物修复成本
+        Integer totalRepairCost = blockadeCostMap.get(to);
+        if (totalRepairCost != null && totalRepairCost > 0) {
             // 根据救援优先级调整障碍物修复成本
-            double repairCost = blockade.getRepairCost();
             if (rescuePriority > 1.0) {
                 // 高优先级区域，降低移动成本以鼓励清理
-                cost += repairCost * 0.3;
+                cost += totalRepairCost * 0.3;
             } else {
                 // 低优先级区域，增加移动成本以抑制清理
-                cost += repairCost * 0.8;
+                cost += totalRepairCost * 0.8;
             }
         }
 
@@ -351,11 +368,8 @@ public class PoliceAStarPathPlanning extends PathPlanning {
         
         if (fallbackTarget != null) {
             buildPath(nodeMap, fallbackTarget);
-            this.bestDirection = calculateOptimalDirection(fallbackTarget);
-            this.bestPosition = fallbackTarget;
         } else {
             this.result = Collections.singletonList(from);
-            this.bestPosition = from;
         }
     }
     
@@ -457,23 +471,19 @@ public class PoliceAStarPathPlanning extends PathPlanning {
                 return;
             }
             
-            double minDistance = Double.MAX_VALUE;
-            for (EntityID target : targets) {
-                double distance = worldInfo.getDistance(id, target);
-                if (distance < minDistance) {
-                    minDistance = distance;
-                }
-            }
+            double minDistance = targets.stream()
+            .mapToDouble(target -> worldInfo.getDistance(id, target))
+            .min()
+            .orElse(Double.MAX_VALUE);
             
             double valueHeuristic = 0;
-            Blockade blockade = blockadeInfo.get(id);
-            if (blockade != null && blockade.isRepairCostDefined()) {
-                // 考虑救援优先级
+            Integer totalRepairCost = blockadeCostMap.get(id);
+            if (totalRepairCost != null && totalRepairCost > 0) {
                 double rescuePriority = calculateRescuePriority(id);
-                valueHeuristic = 1000.0 / (blockade.getRepairCost() + 1) * (1 + rescuePriority);
+                valueHeuristic = 1000.0 / (totalRepairCost + 1) * (1 + rescuePriority);
             }
             
-            this.heuristic = minDistance - valueHeuristic;
+            this.heuristic = Math.max(0, minDistance - valueHeuristic);
         }
 
         public EntityID getID() {
