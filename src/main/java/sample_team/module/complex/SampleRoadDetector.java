@@ -76,12 +76,6 @@ public class SampleRoadDetector extends RoadDetector {
   @Override
   public RoadDetector calc() {
       EntityID positionID = this.agentInfo.getPosition();
-      if (positionID == null) {
-          logger.error("Invalid current position");
-          this.result = null;
-          return this;
-      }
-
       // 检查当前位置障碍物
       StandardEntity currentEntity = worldInfo.getEntity(positionID);
       if (currentEntity instanceof Road) {

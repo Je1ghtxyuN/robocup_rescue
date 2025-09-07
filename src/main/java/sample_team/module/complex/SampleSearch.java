@@ -19,7 +19,10 @@ import adf.core.component.module.algorithm.Clustering;
 import adf.core.component.module.algorithm.PathPlanning;
 import adf.core.component.module.complex.Search;
 import adf.core.debug.DefaultLogger;
+
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -100,64 +103,119 @@ public class SampleSearch extends Search {
   }
 
 
-  @Override
+    @Override
 public Search calc() {
-    // 1. 重置结果和当前目标
     this.result = null;
-    this.currentTargetBuilding = null;  // 新增：重置当前目标建筑
-
-    // 2. 如果没有待搜索建筑，直接返回
+    this.currentTargetBuilding = null; // 重置当前目标建筑
+    StandardEntityURN agentURN = agentInfo.me().getStandardURN(); // 获取代理类型
+    
     if (unsearchedBuildingIDs.isEmpty()) {
         return this;
     }
 
     logger.debug("unsearchedBuildingIDs: " + unsearchedBuildingIDs);
     
-    // 3. 路径规划
-    this.pathPlanning.setFrom(this.agentInfo.getPosition());
-    this.pathPlanning.setDestination(this.unsearchedBuildingIDs);
-    List<EntityID> path = this.pathPlanning.calc().getResult();
-    logger.debug("best path is: " + path);
-
-    // 4. 路径有效性检查
-    if (path == null || path.isEmpty()) {
-        logger.warn("No valid path to targets, marking as unreachable");
-        // 移除所有无法到达的建筑
-        unsearchedBuildingIDs.clear();
-        return this;
-    }
-
-    // 5. 获取最终目标建筑 (路径终点)
-    EntityID targetBuilding = path.get(path.size() - 1);
-    this.currentTargetBuilding = targetBuilding;  // 记录当前目标建筑
-    
-    // 6. 警察特殊处理：优先清理路径障碍
-    StandardEntityURN agentURN = agentInfo.me().getStandardURN();
+    // 1. 警察特殊处理：优先清理路径障碍
     if (agentURN == POLICE_FORCE) {
-        // 检查路径上是否有障碍物
-        for (int i = 0; i < path.size(); i++) {  // 从当前位置开始检查
-            EntityID eid = path.get(i);
+        // 检查当前位置到最近避难所的路径
+        List<EntityID> path = calculatePathToNearestRefuge();
+        for (EntityID eid : path) {
             StandardEntity entity = worldInfo.getEntity(eid);
-            
-            // 发现道路障碍物
             if (entity instanceof Road) {
                 Road road = (Road) entity;
-                if (road.isBlockadesDefined() && road.getBlockades() != null && !road.getBlockades().isEmpty()) {
+                if (road.isBlockadesDefined() && !road.getBlockades().isEmpty()) {
                     this.result = road.getID();
-                    logger.debug("Police: chose blockade road: " + this.result);
+                    logger.debug("Police priority: chose blockade road: " + this.result);
                     return this;
                 }
             }
         }
     }
     
-    // 7. 设置最终目标
-    // 直接选择路径终点（建筑本身）
-    this.result = targetBuilding;
-    logger.debug("Set target building: " + this.result);
+    // 2. 寻找可达目标
+    Set<EntityID> unreachableTargets = new HashSet<>();
+    List<EntityID> path = null;
+    EntityID selectedTarget = null;
     
+    for (EntityID candidate : new ArrayList<>(unsearchedBuildingIDs)) {
+        this.pathPlanning.setFrom(this.agentInfo.getPosition());
+        this.pathPlanning.setDestination(Collections.singleton(candidate));
+        path = this.pathPlanning.calc().getResult();
+        
+        if (path != null && !path.isEmpty()) {
+            selectedTarget = candidate;
+            break;
+        } else {
+            unreachableTargets.add(candidate);
+            logger.debug("Target unreachable: " + candidate);
+        }
+    }
+    
+    // 3. 处理找到的可达目标
+    if (selectedTarget != null) {
+        unsearchedBuildingIDs.remove(selectedTarget);
+        this.currentTargetBuilding = selectedTarget; // 记录当前目标建筑
+        logger.debug("Reachable target found: " + selectedTarget);
+        
+        this.pathPlanning.setFrom(this.agentInfo.getPosition());
+        this.pathPlanning.setDestination(Collections.singleton(selectedTarget));
+        path = this.pathPlanning.calc().getResult();
+        
+        if (path != null && !path.isEmpty()) {
+            // 4. 警察特殊处理：检查路径障碍
+            if (agentURN == POLICE_FORCE) {
+                for (int i = 0; i < path.size(); i++) {
+                    EntityID eid = path.get(i);
+                    StandardEntity entity = worldInfo.getEntity(eid);
+                    if (entity instanceof Road) {
+                        Road road = (Road) entity;
+                        if (road.isBlockadesDefined() && road.getBlockades() != null && 
+                            !road.getBlockades().isEmpty()) {
+                            this.result = road.getID();
+                            logger.debug("Police: chose blockade road: " + this.result);
+                            return this;
+                        }
+                    }
+                }
+            }
+            
+            // 5. 设置最终目标点
+            if (path.size() > 2) {
+                this.result = path.get(path.size() - 3);
+            } else {
+                this.result = path.get(path.size() - 1);
+            }
+            logger.debug("Path to target: " + path);
+        }
+    }
+    
+    // 6. 处理不可达目标
+    unsearchedBuildingIDs.removeAll(unreachableTargets);
+    
+    if (this.result == null && unsearchedBuildingIDs.isEmpty()) {
+        logger.debug("No reachable targets - resetting search list");
+        this.reset();
+    }
+    
+    logger.debug("Selected target point: " + result);
     return this;
 }
+
+// 辅助方法：计算到最近避难所的路径
+private List<EntityID> calculatePathToNearestRefuge() {
+    Collection<EntityID> refugeIDs = worldInfo.getEntityIDsOfType(StandardEntityURN.REFUGE);
+    if (refugeIDs.isEmpty()) return Collections.emptyList();
+    
+    PathPlanning refugePlanner = (PathPlanning) moduleManager.getModule(
+        "Police.PathPlanning", 
+        "adf.impl.module.algorithm.DijkstraPathPlanning");
+    
+    refugePlanner.setFrom(agentInfo.getPosition());
+    refugePlanner.setDestination(refugeIDs);
+    
+    return refugePlanner.calc().getResult();
+}
+
   private void reset() {
     this.unsearchedBuildingIDs.clear();
     this.searchedBuildings.clear(); // 重置已搜索记录
