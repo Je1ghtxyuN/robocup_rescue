@@ -22,10 +22,12 @@ import adf.core.debug.DefaultLogger;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+
 import org.apache.log4j.Logger;
 import rescuecore2.standard.entities.Building;
 import rescuecore2.standard.entities.Road;
-import rescuecore2.standard.entities.Blockade;
+//import rescuecore2.standard.entities.Blockade;
 import rescuecore2.standard.entities.StandardEntity;
 import rescuecore2.standard.entities.StandardEntityURN;
 import rescuecore2.worldmodel.EntityID;
@@ -37,6 +39,8 @@ public class SampleSearch extends Search {
 
   private EntityID result;
   private Collection<EntityID> unsearchedBuildingIDs;
+  private EntityID currentTargetBuilding; // 当前正在前往的建筑
+  private Set<EntityID> searchedBuildings = new HashSet<>();
   private Logger logger;
 
   public SampleSearch(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager, DevelopData developData) {
@@ -83,76 +87,101 @@ public class SampleSearch extends Search {
       this.unsearchedBuildingIDs
           .removeAll(this.worldInfo.getChanged().getChangedEntities());
     }
+    // 检测是否到达建筑
+    if (currentTargetBuilding != null && 
+        currentTargetBuilding.equals(agentInfo.getPosition())) {
+        searchedBuildings.add(currentTargetBuilding);
+        unsearchedBuildingIDs.remove(currentTargetBuilding);
+        currentTargetBuilding = null;
+        logger.info("Marked building as searched: " + currentTargetBuilding);
+    }
+    
     return this;
   }
 
 
   @Override
-  public Search calc() {
+public Search calc() {
+    // 1. 重置结果和当前目标
     this.result = null;
-    if (unsearchedBuildingIDs.isEmpty())
-      return this;
+    this.currentTargetBuilding = null;  // 新增：重置当前目标建筑
+
+    // 2. 如果没有待搜索建筑，直接返回
+    if (unsearchedBuildingIDs.isEmpty()) {
+        return this;
+    }
 
     logger.debug("unsearchedBuildingIDs: " + unsearchedBuildingIDs);
+    
+    // 3. 路径规划
     this.pathPlanning.setFrom(this.agentInfo.getPosition());
     this.pathPlanning.setDestination(this.unsearchedBuildingIDs);
     List<EntityID> path = this.pathPlanning.calc().getResult();
     logger.debug("best path is: " + path);
 
+    // 4. 路径有效性检查
+    if (path == null || path.isEmpty()) {
+        logger.warn("No valid path to targets, marking as unreachable");
+        // 移除所有无法到达的建筑
+        unsearchedBuildingIDs.clear();
+        return this;
+    }
+
+    // 5. 获取最终目标建筑 (路径终点)
+    EntityID targetBuilding = path.get(path.size() - 1);
+    this.currentTargetBuilding = targetBuilding;  // 记录当前目标建筑
+    
+    // 6. 警察特殊处理：优先清理路径障碍
     StandardEntityURN agentURN = agentInfo.me().getStandardURN();
-    if (agentURN == POLICE_FORCE && path != null && path.size() > 1) {
-      // 优先处理路径上的障碍物
-      for (int i = 1; i < path.size(); i++) { // 从当前位置之后的下一个点开始
-        EntityID eid = path.get(i);
-        StandardEntity entity = worldInfo.getEntity(eid);
-        if (entity instanceof Road) {
-          Road road = (Road) entity;
-          if (road.isBlockadesDefined() && road.getBlockades() != null && !road.getBlockades().isEmpty()) {
-            // 路径上有障碍物，优先返回该道路
-            this.result = road.getID();
-            logger.debug("Police: chose blockade road: " + this.result);
-            return this;
-          }
+    if (agentURN == POLICE_FORCE) {
+        // 检查路径上是否有障碍物
+        for (int i = 0; i < path.size(); i++) {  // 从当前位置开始检查
+            EntityID eid = path.get(i);
+            StandardEntity entity = worldInfo.getEntity(eid);
+            
+            // 发现道路障碍物
+            if (entity instanceof Road) {
+                Road road = (Road) entity;
+                if (road.isBlockadesDefined() && road.getBlockades() != null && !road.getBlockades().isEmpty()) {
+                    this.result = road.getID();
+                    logger.debug("Police: chose blockade road: " + this.result);
+                    return this;
+                }
+            }
         }
-      }
-      // 路径上无障碍物，按原逻辑返回目标建筑
-      if (path.size() > 2) {
-        this.result = path.get(path.size() - 3);
-      } else {
-        this.result = path.get(path.size() - 1);
-      }
-      logger.debug("Police: chose building: " + this.result);
-      return this;
     }
-
-    // 非警察或无路径，保持原逻辑
-    if (path != null && path.size() > 2) {
-      this.result = path.get(path.size() - 3);
-    } else if (path != null && path.size() > 0) {
-      this.result = path.get(path.size() - 1);
-    }
-    logger.debug("chose: " + result);
+    
+    // 7. 设置最终目标
+    // 直接选择路径终点（建筑本身）
+    this.result = targetBuilding;
+    logger.debug("Set target building: " + this.result);
+    
     return this;
-  }
-
-
+}
   private void reset() {
     this.unsearchedBuildingIDs.clear();
+    this.searchedBuildings.clear(); // 重置已搜索记录
+    
     int clusterIndex = this.clustering.getClusterIndex(this.agentInfo.getID());
-    Collection<StandardEntity> clusterEntities = this.clustering
-        .getClusterEntities(clusterIndex);
-    if (clusterEntities != null && clusterEntities.size() > 0) {
-      for (StandardEntity entity : clusterEntities) {
-        if (entity instanceof Building && entity.getStandardURN() != REFUGE) {
-          this.unsearchedBuildingIDs.add(entity.getID());
+    Collection<StandardEntity> clusterEntities = this.clustering.getClusterEntities(clusterIndex);
+    
+    if (clusterEntities != null && !clusterEntities.isEmpty()) {
+        for (StandardEntity entity : clusterEntities) {
+            if (entity instanceof Building && entity.getStandardURN() != REFUGE
+                && !searchedBuildings.contains(entity.getID())) { // 排除已搜索
+                this.unsearchedBuildingIDs.add(entity.getID());
+            }
         }
-      }
     } else {
-      this.unsearchedBuildingIDs
-          .addAll(this.worldInfo.getEntityIDsOfType(BUILDING, GAS_STATION,
-              AMBULANCE_CENTRE, FIRE_STATION, POLICE_OFFICE));
+        // 原始逻辑，但排除已搜索建筑
+        for (EntityID id : this.worldInfo.getEntityIDsOfType(BUILDING, GAS_STATION, 
+                AMBULANCE_CENTRE, FIRE_STATION, POLICE_OFFICE)) {
+            if (!searchedBuildings.contains(id)) {
+                this.unsearchedBuildingIDs.add(id);
+            }
+        }
     }
-  }
+}
 
 
   @Override
