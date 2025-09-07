@@ -59,33 +59,60 @@ public class SampleRoadDetector extends RoadDetector {
   }
 
 
-  @Override
-  public RoadDetector calc() {
+@Override
+public RoadDetector calc() {
     EntityID positionID = this.agentInfo.getPosition();
     StandardEntity currentPosition = worldInfo.getEntity(positionID);
     openedAreas.add((Area) currentPosition);
     if (positionID.equals(result)) {
-      logger.debug("reach to " + currentPosition + " resetting target");
-      this.result = null;
+        logger.debug("reach to " + currentPosition + " resetting target");
+        this.result = null;
     }
 
     if (this.result == null) {
-      HashSet<Area> currentTargets = calcTargets();
-      logger.debug("Targets: " + currentTargets);
-      if (currentTargets.isEmpty()) {
-        this.result = null;
-        return this;
-      }
-      this.pathPlanning.setFrom(positionID);
-      this.pathPlanning.setDestination(toEntityIds(currentTargets));
-      List<EntityID> path = this.pathPlanning.calc().getResult();
-      if (path != null && path.size() > 0) {
-        this.result = path.get(path.size() - 1);
-      }
-      logger.debug("Selected Target: " + this.result);
+        HashSet<Area> currentTargets = calcTargets();
+        logger.debug("Targets: " + currentTargets);
+        if (currentTargets.isEmpty()) {
+            // 尝试获取所有未打开的道路作为备用目标
+            Collection<StandardEntity> roads = worldInfo.getEntitiesOfType(StandardEntityURN.ROAD);
+            Set<Area> roadAreas = new HashSet<>();
+            for (StandardEntity e : roads) {
+                roadAreas.add((Area) e);
+            }
+            roadAreas.removeAll(openedAreas);
+            currentTargets = new HashSet<>(roadAreas);
+            logger.debug("No targets from calcTargets, using roads: " + currentTargets);
+        }
+        if (currentTargets.isEmpty()) {
+            // 如果仍然没有目标，则获取所有未打开的区域
+            Collection<StandardEntity> allEntities = worldInfo.getAllEntities();
+            Set<Area> allAreas = new HashSet<>();
+            for (StandardEntity e : allEntities) {
+                if (e instanceof Area) {
+                    allAreas.add((Area) e);
+                }
+            }
+            allAreas.removeAll(openedAreas);
+            currentTargets = new HashSet<>(allAreas);
+            logger.debug("No roads, using all areas: " + currentTargets);
+        }
+        if (currentTargets.isEmpty()) {
+            // 如果所有区域都打开了，重置openedAreas以便重新探索
+            openedAreas.clear();
+            logger.debug("All areas opened, resetting openedAreas");
+            this.result = null;
+            return this;
+        }
+        this.pathPlanning.setFrom(positionID);
+        this.pathPlanning.setDestination(toEntityIds(currentTargets));
+        List<EntityID> path = this.pathPlanning.calc().getResult();
+        if (path != null && path.size() > 0) {
+            this.result = path.get(path.size() - 1);
+        }
+        logger.debug("Selected Target: " + this.result);
     }
     return this;
-  }
+}
 
 
   private Collection<EntityID>
