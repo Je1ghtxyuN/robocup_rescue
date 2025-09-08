@@ -1,8 +1,8 @@
 package sample_team.module.complex;
 
-import static rescuecore2.standard.entities.StandardEntityURN.AMBULANCE_TEAM;
 import static rescuecore2.standard.entities.StandardEntityURN.CIVILIAN;
 import static rescuecore2.standard.entities.StandardEntityURN.REFUGE;
+import static rescuecore2.standard.entities.StandardEntityURN.FIRE_BRIGADE;
 import adf.core.agent.communication.MessageManager;
 import adf.core.agent.develop.DevelopData;
 import adf.core.agent.info.AgentInfo;
@@ -23,7 +23,7 @@ import rescuecore2.standard.entities.StandardEntity;
 import rescuecore2.standard.entities.StandardEntityURN;
 import rescuecore2.worldmodel.EntityID;
 
-public class SampleHumanDetector extends HumanDetector {
+public class FireHumanDetector extends HumanDetector {
 
     private Clustering clustering;
     private EntityID result;
@@ -34,10 +34,15 @@ public class SampleHumanDetector extends HumanDetector {
     private static final int MAX_DAMAGE = 200;
     private static final int MAX_BURIEDNESS = 100;
 
-    public SampleHumanDetector(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager, DevelopData developData) {
+        // 可调节的阈值参数inValidHuman
+    private static final int MIN_HP_THRESHOLD = 1000;    // HP低于此值认为无效
+    private static final int MIN_DAMAGE_THRESHOLD = 50;  // 伤害低于此值认为无效
+    private static final int MIN_BURIEDNESS_THRESHOLD = 30; // 掩埋程度高于此值认为无效
+
+    public FireHumanDetector(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager, DevelopData developData) {
         super(ai, wi, si, moduleManager, developData);
         logger = DefaultLogger.getLogger(agentInfo.me());
-        this.clustering = moduleManager.getModule("SampleHumanDetector.Clustering",
+        this.clustering = moduleManager.getModule("FireHumanDetector.Clustering",
                 "adf.impl.module.algorithm.KMeansClustering");
         registerModule(this.clustering);
     }
@@ -82,26 +87,26 @@ public class SampleHumanDetector extends HumanDetector {
             return null;
         }
 
-        // 使用加权评分系统选择最佳目标
-        targets.sort(new WeightedPrioritySorter(this.worldInfo, this.agentInfo.me()));
+        // 使用加权评分系统选择最佳目标 - 消防队更关注掩埋程度
+        targets.sort(new FirePrioritySorter(this.worldInfo, this.agentInfo.me()));
         Human selected = targets.get(0);
         logger.debug("Selected target: " + selected + " with ID: " + selected.getID());
 
         return selected.getID();
     }
 
-    // 新的加权优先级排序器
-    private class WeightedPrioritySorter implements Comparator<StandardEntity> {
+    // 消防队特定的优先级排序器
+    private class FirePrioritySorter implements Comparator<StandardEntity> {
         private StandardEntity reference;
         private WorldInfo worldInfo;
 
-        // 权重配置 - 可以根据实际需求调整这些值
+        // 消防队权重配置 - 更关注掩埋程度
         private static final double DISTANCE_WEIGHT = 0.5;
         private static final double HP_WEIGHT = 0.2;
         private static final double BURIEDNESS_WEIGHT = 0.15;
         private static final double DAMAGE_WEIGHT = 0.15;
 
-        WeightedPrioritySorter(WorldInfo wi, StandardEntity reference) {
+        FirePrioritySorter(WorldInfo wi, StandardEntity reference) {
             this.reference = reference;
             this.worldInfo = wi;
         }
@@ -110,66 +115,41 @@ public class SampleHumanDetector extends HumanDetector {
         public int compare(StandardEntity a, StandardEntity b) {
             double scoreA = calculatePriorityScore((Human) a);
             double scoreB = calculatePriorityScore((Human) b);
-
-            // 分数越高表示优先级越高，所以按降序排列
             return Double.compare(scoreB, scoreA);
         }
 
         private double calculatePriorityScore(Human human) {
-            // 计算距离分数（距离越近分数越高）
-            double distanceScore = calculateDistanceScore(human);
-
-            // 计算血量分数（血量越低分数越高）
-            double hpScore = calculateHpScore(human);
-
-            // 计算掩埋程度分数（掩埋程度越高分数越高）
-            double buriednessScore = calculateBuriednessScore(human);
-
-            // 计算伤害分数（伤害越高分数越高）
-            double damageScore = calculateDamageScore(human);
-
-            // 综合加权分数
-            return (distanceScore * DISTANCE_WEIGHT) +
-                    (hpScore * HP_WEIGHT) +
-                    (buriednessScore * BURIEDNESS_WEIGHT) +
-                    (damageScore * DAMAGE_WEIGHT);
+            return (calculateDistanceScore(human) * DISTANCE_WEIGHT) +
+                   (calculateHpScore(human) * HP_WEIGHT) +
+                   (calculateBuriednessScore(human) * BURIEDNESS_WEIGHT) +
+                   (calculateDamageScore(human) * DAMAGE_WEIGHT);
         }
 
         private double calculateDistanceScore(Human human) {
             int distance = this.worldInfo.getDistance(this.reference, human);
-            // 使用指数衰减函数，距离越近分数越高
-            // 调整分母以控制衰减速度，这里使用50000作为基准值
             return Math.exp(-distance / 50000.0);
         }
 
         private double calculateHpScore(Human human) {
             if (!human.isHPDefined()) return 0;
-
             int hp = human.getHP();
-            // 血量越低，优先级越高（使用线性函数）
-            // HP范围0-10000，归一化到0-1范围
             return 1.0 - (hp / (double) MAX_HP);
         }
 
         private double calculateBuriednessScore(Human human) {
             if (!human.isBuriednessDefined()) return 0;
-
             int buriedness = human.getBuriedness();
-            // 掩埋程度越高，优先级越高
-            // 掩埋程度范围0-100，归一化到0-1范围
             return buriedness / (double) MAX_BURIEDNESS;
         }
 
         private double calculateDamageScore(Human human) {
             if (!human.isDamageDefined()) return 0;
-
             int damage = human.getDamage();
-            // 伤害越高，优先级越高
-            // 伤害范围0-10000，归一化到0-1范围
             return damage / (double) MAX_DAMAGE;
         }
     }
 
+    // 以下方法与SampleHumanDetector相同，但修改了isValidHuman方法
     @Override
     public EntityID getTarget() {
         return this.result;
@@ -212,27 +192,35 @@ public class SampleHumanDetector extends HumanDetector {
     }
 
     private boolean isValidHuman(StandardEntity entity) {
-        if (entity == null)
-            return false;
-        if (!(entity instanceof Human))
-            return false;
+    // 基本检查
+    if (entity == null)
+        return false;
+    if (!(entity instanceof Human))
+        return false;
 
-        Human target = (Human) entity;
-        if (!target.isHPDefined() || target.getHP() == 0)
-            return false;
-        if (!target.isPositionDefined())
-            return false;
-        if (!target.isDamageDefined() || target.getDamage() == 0)
-            return false;
-        if (!target.isBuriednessDefined())
-            return false;
-
-        StandardEntity position = worldInfo.getPosition(target);
-        if (position == null)
-            return false;
+    Human target = (Human) entity;
+    // HP检查
+    if (!target.isHPDefined() || target.getHP() == 0 )
+        return false;
+    // 位置检查
+    if (!target.isPositionDefined())
+        return false;
+    // 伤害检查
+    if (!target.isDamageDefined() || target.getDamage() == 0  )
+        return false;
+    // 掩埋程度检查
+    if (!target.isBuriednessDefined() )
+        return false;
+    // 综合属性检查
+    if (target.getDamage() < MIN_DAMAGE_THRESHOLD && target.getHP() < MIN_HP_THRESHOLD&& target.getBuriedness() > MIN_BURIEDNESS_THRESHOLD )
+        return false;
+    // 位置实体检查
+    StandardEntity position = worldInfo.getPosition(target);
+    if (position == null)
+        return false;
 
         StandardEntityURN positionURN = position.getStandardURN();
-        if (positionURN == REFUGE || positionURN == AMBULANCE_TEAM)
+        if (positionURN == REFUGE )
             return false;
 
         return true;
