@@ -155,16 +155,16 @@ public class SampleRoadDetector extends RoadDetector {
                 int hp = human.isHPDefined() ? human.getHP() : 10000;
                 int buriedness = human.isBuriednessDefined() ? human.getBuriedness() : 0;
                 
-                // 紧急程度 = (10000 - HP) + buriedness * 2
-                double emergency = (10000 - hp) + (buriedness * 2);
+                // 紧急程度 = (10000 - HP) + buriedness * 30
+                double emergency = (10000 - hp) + (buriedness * 30);
                 if (emergency > maxEmergency) {
                     maxEmergency = emergency;
                 }
             }
         }
         
-        // 紧急程度因子 = 1.0 + emergency/100
-        return 1.0 + (maxEmergency / 10000.0);
+        // 紧急程度因子 = 1.0 + emergency/1000
+        return 1.0 + (maxEmergency / 1000.0);
     }
 
     private boolean isValidBlockade(Blockade blockade) {

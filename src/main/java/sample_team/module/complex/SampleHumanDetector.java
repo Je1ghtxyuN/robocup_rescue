@@ -31,7 +31,7 @@ public class SampleHumanDetector extends HumanDetector {
 
     // 属性最大值常量
     private static final int MAX_HP = 10000;
-    private static final int MAX_DAMAGE = 100;
+    private static final int MAX_DAMAGE = 200;
     private static final int MAX_BURIEDNESS = 100;
 
     public SampleHumanDetector(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager, DevelopData developData) {
@@ -96,10 +96,10 @@ public class SampleHumanDetector extends HumanDetector {
         private WorldInfo worldInfo;
 
         // 权重配置 - 可以根据实际需求调整这些值
-        private static final double DISTANCE_WEIGHT = 0.8;
-        private static final double HP_WEIGHT = 0.2;
-        private static final double BURIEDNESS_WEIGHT = 0.3;
-        private static final double DAMAGE_WEIGHT = 0.1;
+        private static final double DISTANCE_WEIGHT = 0.1;
+        private static final double HP_WEIGHT = 0.3;
+        private static final double BURIEDNESS_WEIGHT = 0.5;
+        private static final double DAMAGE_WEIGHT = 0.3;
 
         WeightedPrioritySorter(WorldInfo wi, StandardEntity reference) {
             this.reference = reference;
