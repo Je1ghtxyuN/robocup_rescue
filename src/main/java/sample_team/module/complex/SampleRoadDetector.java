@@ -133,9 +133,49 @@ public class SampleRoadDetector extends RoadDetector {
         double refugeFactor = isBlockingRefuge(blockade) ? 3.0 : 1.0;
 
         // 入口因子（在建筑物入口处优先级更高）
-        double entranceFactor = isAtBuildingEntrance(blockade) ? 2.0 : 1.0;
+        double entranceFactor = isAtBuildingEntrance(blockade) ? 3.0 : 1.0;
+
+        // 聚集惩罚因子
+        double concentrationPenalty = calculateConcentrationPenalty(position);
         
-        return visibilityFactor * entranceFactor * refugeFactor;
+        return visibilityFactor * entranceFactor * refugeFactor * concentrationPenalty;
+    }
+
+    // ===== 新增方法：计算聚集惩罚因子 =====
+    private double calculateConcentrationPenalty(EntityID myPosition) {
+        // 1. 获取周围警察数量
+        int nearbyPolice = getNearbyPoliceCount(myPosition, 30000); // 30米范围内
+        
+        // 2. 计算聚集惩罚（警察越多惩罚越大）
+        // 公式：1.0 / (1 + e^(0.5 * (count - 2))) 
+        // 解释：当周围警察>2人时，惩罚开始明显；5人时惩罚约为0.1
+        return 1.0 / (1 + Math.exp(0.5 * (nearbyPolice - 2)));
+    }
+
+    // ===== 新增方法：获取周围警察数量 =====
+    private int getNearbyPoliceCount(EntityID myPosition, int radius) {
+        int count = 0;
+        
+        // 1. 获取所有警察实体
+        Collection<StandardEntity> allPolice = worldInfo.getEntitiesOfType(
+            StandardEntityURN.POLICE_FORCE
+        );
+        
+        // 2. 检查每个警察是否在范围内（排除自己）
+        for (StandardEntity police : allPolice) {
+            // 跳过自己
+            if (police.getID().equals(agentInfo.getID())) continue;
+            
+            // 计算距离
+            int distance = worldInfo.getDistance(myPosition, police.getID());
+            
+            // 如果在范围内则计数
+            if (distance <= radius && distance >= 0) {
+                count++;
+            }
+        }
+        
+        return count;
     }
 
     private boolean isValidBlockade(Blockade blockade) {

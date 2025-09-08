@@ -53,12 +53,6 @@ public class SampleBuildingDetector extends HumanDetector {
 
     @Override
     public HumanDetector calc() {
-        Human transportHuman = this.agentInfo.someoneOnBoard();
-        if (transportHuman != null) {
-            logger.debug("someoneOnBoard:" + transportHuman);
-            this.result = transportHuman.getID();
-            return this;
-        }
         if (this.result != null) {
             Human target = (Human) this.worldInfo.getEntity(this.result);
             if (!isValidHuman(target)) {
@@ -159,7 +153,7 @@ public class SampleBuildingDetector extends HumanDetector {
 
             int buriedness = human.getBuriedness();
             // 掩埋程度越高，优先级越高
-            // 掩埋程度范围0-100，归一化到0-1范围
+            // 掩埋程度范围0-200，归一化到0-1范围
             return buriedness / (double) MAX_BURIEDNESS;
         }
 

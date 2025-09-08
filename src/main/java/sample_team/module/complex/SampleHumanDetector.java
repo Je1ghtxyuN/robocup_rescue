@@ -99,8 +99,8 @@ public class SampleHumanDetector extends HumanDetector {
         private WorldInfo worldInfo;
 
         // 权重配置 - 可以根据实际需求调整这些值
-        private static final double DISTANCE_WEIGHT = 0.6;
-        private static final double HP_WEIGHT = 0.3;
+        private static final double DISTANCE_WEIGHT = 0.8;
+        private static final double HP_WEIGHT = 0.1;
         private static final double BURIEDNESS_WEIGHT = 0.5;
         private static final double DAMAGE_WEIGHT = 0.3;
 
