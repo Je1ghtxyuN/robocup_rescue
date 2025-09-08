@@ -10,7 +10,13 @@ import adf.core.component.module.algorithm.Clustering;
 import adf.core.component.module.complex.RoadDetector;
 import rescuecore2.standard.entities.*;
 import rescuecore2.worldmodel.EntityID;
+import rescuecore2.worldmodel.Entity;
+
 import java.util.*;
+import java.util.stream.Collectors;
+import java.awt.geom.Line2D;
+import java.awt.geom.Area;
+import java.awt.Shape;
 
 public class SampleRoadDetector extends RoadDetector {
 
@@ -43,7 +49,7 @@ public class SampleRoadDetector extends RoadDetector {
 
         // 1. 获取当前位置所在道路
         StandardEntity currentArea = worldInfo.getEntity(position);
-        if (currentArea instanceof Area) {
+        if (currentArea instanceof rescuecore2.standard.entities.Area) {
             visibleRoads.add(currentArea.getID());
         }
         
@@ -108,7 +114,7 @@ public class SampleRoadDetector extends RoadDetector {
     }
 
     private void prioritizeAndSelectTarget(EntityID position, List<Blockade> blockades) {
-        // 按综合优先级排序（紧急度+距离）
+        // 按综合优先级排序
         blockades.sort((b1, b2) -> {
             double priority1 = calculatePriority(position, b1);
             double priority2 = calculatePriority(position, b2);
@@ -119,52 +125,17 @@ public class SampleRoadDetector extends RoadDetector {
         this.result = blockades.get(0).getPosition();
     }
 
-    private double calculatePriority(EntityID position, Blockade blockade) {
-        int cost = blockade.getRepairCost();
-        int distance = worldInfo.getDistance(position, blockade.getPosition());
-        
-        // 紧急度 = 修复成本 / 200
-        double severity = cost / 200.0;
-        
-        // 距离因子（近距离优先）
-        double distanceFactor = 1.0 + (1000.0 / (distance + 1));
-        
-        // 时间因子（超过30秒未处理提升优先级）
-        int lastProcessed = lastProcessedTime.getOrDefault(blockade.getPosition(), 0);
-        double timeFactor = (currentTime - lastProcessed > 30) ? 1.5 : 1.0;
-        
+    private double calculatePriority(EntityID position, Blockade blockade) { 
         // 可见性因子（当前视野内优先级更高）
-        double visibilityFactor = (visibleRoads.contains(blockade.getPosition())) ? 1.5 : 1.0;
-        
-        // 人类紧急程度因子（HP低或被埋压严重的优先）
-        double humanEmergencyFactor = calculateHumanEmergencyFactor(blockade.getPosition());
-        
-        return severity * distanceFactor * timeFactor * visibilityFactor * humanEmergencyFactor;
-    }
+        double visibilityFactor = (visibleRoads.contains(blockade.getPosition())) ? 2.0 : 1.0;
 
-    // 计算道路位置的人类紧急程度
-    private double calculateHumanEmergencyFactor(EntityID position) {
-        double maxEmergency = 1.0; // 默认值
+        // 避难所阻挡因子（新增）: 如果障碍物阻挡避难所，则赋予更高权重
+        double refugeFactor = isBlockingRefuge(blockade) ? 3.0 : 1.0;
+
+        // 入口因子（在建筑物入口处优先级更高）
+        double entranceFactor = isAtBuildingEntrance(blockade) ? 2.0 : 1.0;
         
-        // 获取该位置的所有人类（平民）
-        Collection<StandardEntity> humans = worldInfo.getEntitiesOfType(StandardEntityURN.CIVILIAN);
-        for (StandardEntity entity : humans) {
-            Human human = (Human) entity;
-            if (position.equals(human.getPosition())) {
-                // 计算人类紧急程度：HP越低紧急度越高，被埋压程度越高紧急度越高
-                int hp = human.isHPDefined() ? human.getHP() : 10000;
-                int buriedness = human.isBuriednessDefined() ? human.getBuriedness() : 0;
-                
-                // 紧急程度 = (10000 - HP) + buriedness * 30
-                double emergency = (10000 - hp) + (buriedness * 30);
-                if (emergency > maxEmergency) {
-                    maxEmergency = emergency;
-                }
-            }
-        }
-        
-        // 紧急程度因子 = 1.0 + emergency/1000
-        return 1.0 + (maxEmergency / 1000.0);
+        return visibilityFactor * entranceFactor * refugeFactor;
     }
 
     private boolean isValidBlockade(Blockade blockade) {
@@ -252,5 +223,137 @@ public class SampleRoadDetector extends RoadDetector {
     @Override
     public EntityID getTarget() {
         return result;
+    }
+
+
+
+
+    // 检测障碍物是否在建筑物入口处
+    private boolean isAtBuildingEntrance(Blockade blockade) {
+        // 获取障碍物所在区域
+        EntityID positionId = blockade.getPosition();
+        if (positionId == null) return false;
+        
+        StandardEntity positionEntity = worldInfo.getEntity(positionId);
+        
+        // 如果障碍物直接在建筑上
+        if (positionEntity instanceof Building) {
+            Building building = (Building) positionEntity;
+            return isBlockadeAtEntrance(blockade, building, worldInfo);
+        }
+        // 如果障碍物在道路上，检查邻近建筑
+        else if (positionEntity instanceof Road) {
+            Road road = (Road) positionEntity;
+            if (!road.isEdgesDefined()) return false;
+            
+            // 检查所有邻近建筑的入口
+            for (Edge edge : road.getEdges()) {
+                if (edge.isPassable()) {
+                    EntityID neighbourId = edge.getNeighbour();
+                    if (neighbourId == null) continue;
+                    
+                    StandardEntity neighbour = worldInfo.getEntity(neighbourId);
+                    if (neighbour instanceof Building) {
+                        Building building = (Building) neighbour;
+                        if (isBlockadeAtEntrance(blockade, building, worldInfo)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    //尝试加入判断障碍物是否在建筑入口
+    public boolean isBlockadeAtEntrance(Blockade blockade, Building building, WorldInfo WorldOInfo) {
+    // 步骤1：检查障碍物是否在该建筑内
+    if (!isBlockadeInBuilding(blockade, building)) return false;
+    
+    // 步骤2：获取建筑的所有入口边
+    List<Edge> entrances = getEntranceEdges(building, worldInfo);
+     if (entrances.isEmpty()) return false;
+    
+    // 步骤3：检查是否覆盖任一入口边
+    return entrances.stream()
+        .anyMatch(edge -> coversEdge(blockade, edge));
+    }
+
+    // 检查障碍物是否在该建筑内
+    public boolean isBlockadeInBuilding(Blockade blockade, Building building) {
+    return blockade.isPositionDefined() && 
+        blockade.getPosition().equals(building.getID());
+    }
+
+    // 获取建筑的所有入口边
+    public List<Edge> getEntranceEdges(Building building, WorldInfo WorldOInfo) {
+    return building.getEdges().stream()
+        .filter(edge -> edge.isPassable()) // 可通行的边
+        .filter(edge -> {
+            EntityID neighbourID = edge.getNeighbour();
+            Entity neighbour = WorldOInfo.getEntity(neighbourID);
+            return neighbour instanceof Road; // 邻居是道路
+        })
+        .collect(Collectors.toList());
+    }
+
+    
+    // 检查是否覆盖任一入口边
+    public boolean coversEdge(Blockade blockade, Edge edge) {
+        Shape blockadeShape = blockade.getShape(); // 障碍物多边形
+        Area blockadeArea = new Area(blockadeShape);
+        
+        // 将入口边转为Line2D
+        Line2D edgeLine = new Line2D.Double(
+            edge.getStartX(), edge.getStartY(),
+            edge.getEndX(), edge.getEndY()
+        );
+        
+        // 检测多边形是否与线段相交
+        return blockadeArea.intersects(edgeLine.getBounds2D());
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+        public boolean isBlockingRefuge(Blockade blockade) {
+        if (blockade == null || !blockade.isPositionDefined()) {
+            return false; // 障碍物无效或位置未定义，直接返回false
+        }
+        
+        EntityID blockPos = blockade.getPosition(); // 获取障碍物所在的区域ID
+        if (blockPos == null) {
+            return false;
+        }
+        
+        // 获取所有避难所实体
+        Collection<StandardEntity> refuges = worldInfo.getEntitiesOfType(StandardEntityURN.REFUGE);
+        for (StandardEntity entity : refuges) {
+            if (!(entity instanceof rescuecore2.standard.entities.Area)) {
+                continue; // 跳过非Area实体（理论上不会发生，但安全处理）
+            }
+            rescuecore2.standard.entities.Area refuge = (rescuecore2.standard.entities.Area) entity; // 避难所是Area的子类
+            
+            // 情况1：障碍物直接位于避难所上
+            if (refuge.getID().equals(blockPos)) {
+                return true;
+            }
+            
+            // 情况2：障碍物位于避难所的直接邻居区域上
+            // 获取避难所的可通行邻居列表（通过getNeighbours()，基于可通行边缘）
+            List<EntityID> neighbours = refuge.getNeighbours();
+            if (neighbours != null && neighbours.contains(blockPos)) {
+                return true;
+            }
+        }
+        return false; // 未找到匹配，障碍物不影响避难所
     }
 }
