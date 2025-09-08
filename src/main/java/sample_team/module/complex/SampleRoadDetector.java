@@ -123,8 +123,8 @@ public class SampleRoadDetector extends RoadDetector {
         int cost = blockade.getRepairCost();
         int distance = worldInfo.getDistance(position, blockade.getPosition());
         
-        // 紧急度 = 修复成本 / 100
-        double severity = cost / 100.0;
+        // 紧急度 = 修复成本 / 200
+        double severity = cost / 200.0;
         
         // 距离因子（近距离优先）
         double distanceFactor = 1.0 + (1000.0 / (distance + 1));

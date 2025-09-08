@@ -3,6 +3,8 @@ package sample_team.module.complex;
 import static rescuecore2.standard.entities.StandardEntityURN.AMBULANCE_TEAM;
 import static rescuecore2.standard.entities.StandardEntityURN.CIVILIAN;
 import static rescuecore2.standard.entities.StandardEntityURN.REFUGE;
+import rescuecore2.standard.entities.Area;
+import rescuecore2.standard.entities.Edge;
 import adf.core.agent.communication.MessageManager;
 import adf.core.agent.develop.DevelopData;
 import adf.core.agent.info.AgentInfo;
@@ -17,7 +19,11 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+
 import org.apache.log4j.Logger;
+
+import rescuecore2.standard.entities.Blockade;
 import rescuecore2.standard.entities.Human;
 import rescuecore2.standard.entities.StandardEntity;
 import rescuecore2.standard.entities.StandardEntityURN;
@@ -31,13 +37,13 @@ public class SampleBuildingDetector extends HumanDetector {
 
     // 属性最大值常量
     private static final int MAX_HP = 10000;
-    private static final int MAX_DAMAGE = 100;
+    private static final int MAX_DAMAGE = 200;
     private static final int MAX_BURIEDNESS = 100;
 
     public SampleBuildingDetector(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager, DevelopData developData) {
         super(ai, wi, si, moduleManager, developData);
         logger = DefaultLogger.getLogger(agentInfo.me());
-        this.clustering = moduleManager.getModule("SampleBuildingDetector.Clustering",
+        this.clustering = moduleManager.getModule("SampleHumanDetector.Clustering",
                 "adf.impl.module.algorithm.KMeansClustering");
         registerModule(this.clustering);
     }
@@ -78,6 +84,9 @@ public class SampleBuildingDetector extends HumanDetector {
 
         logger.debug("Potential targets count: " + targets.size());
 
+        // 新增：过滤不可达目标
+        targets.removeIf(target -> !isTargetReachable(target));
+
         if (targets.isEmpty()) {
             return null;
         }
@@ -90,16 +99,97 @@ public class SampleBuildingDetector extends HumanDetector {
         return selected.getID();
     }
 
+    // 新增：目标可达性检查
+    private boolean isTargetReachable(Human target) {
+        // 1. 获取目标所在区域
+        StandardEntity position = worldInfo.getPosition(target);
+        if (!(position instanceof Area)) {
+            logger.debug("Target not in area: " + target.getID());
+            return false;
+        }
+        Area targetArea = (Area) position;
+
+        // 2. 检查区域出口是否被障碍物完全阻塞
+        if (isAreaCompletelyBlocked(targetArea)) {
+            logger.debug("Area completely blocked: " + targetArea.getID());
+            return false;
+        }
+
+        // 3. 检查路径上是否有未清除障碍物
+        return isPathClearToArea(targetArea);
+    }
+
+    // 判断区域是否完全被阻塞
+    private boolean isAreaCompletelyBlocked(Area area) {
+        if (!area.isEdgesDefined()) return false;
+
+        List<Edge> edges = area.getEdges();
+        if (edges.isEmpty()) return true; // 无出口区域
+
+        // 检查所有出口是否都被阻塞
+        for (Edge edge : edges) {
+            if (edge.isPassable()) {
+                return false; // 至少有一条通路
+            }
+        }
+        return true;
+    }
+
+    // 判断到目标区域的路径是否通畅
+    private boolean isPathClearToArea(Area targetArea) {
+        // 获取当前智能体位置
+        Area agentArea = getAgentArea();
+        if (agentArea == null) return false;
+
+        // 检查直接路径上的障碍物
+        Set<EntityID> pathAreas = findPathAreas(agentArea, targetArea);
+        for (EntityID areaID : pathAreas) {
+            Area pathArea = (Area) worldInfo.getEntity(areaID);
+            if (pathArea == null) continue;
+
+            // 检查区域上的障碍物
+            for (EntityID blockadeID : pathArea.getBlockades()) {
+                Blockade blockade = (Blockade) worldInfo.getEntity(blockadeID);
+                if (blockade != null && blockade.isRepairCostDefined() && blockade.getRepairCost() > 0) {
+                    logger.debug("Path blocked by: " + blockadeID);
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    // 获取智能体所在区域
+    private Area getAgentArea() {
+        EntityID positionID = agentInfo.getPosition();
+        StandardEntity positionEntity = worldInfo.getEntity(positionID);
+        return (positionEntity instanceof Area) ? (Area) positionEntity : null;
+    }
+
+    // 查找两区域间的路径区域（简化版）
+    private Set<EntityID> findPathAreas(Area from, Area to) {
+        Set<EntityID> path = new HashSet<>();
+        path.add(from.getID());
+        path.add(to.getID());
+
+        // 获取直接邻居（实际实现应使用寻路算法）
+        path.addAll(from.getNeighbours());
+        path.addAll(to.getNeighbours());
+        
+        return path;
+    }
+
+
     // 新的加权优先级排序器
     private class WeightedPrioritySorter implements Comparator<StandardEntity> {
         private StandardEntity reference;
         private WorldInfo worldInfo;
 
         // 权重配置 - 可以根据实际需求调整这些值
-        private static final double DISTANCE_WEIGHT = 0.1;
-        private static final double HP_WEIGHT = 0.5;
-        private static final double BURIEDNESS_WEIGHT = 0.2;
-        private static final double DAMAGE_WEIGHT = 0.4;
+        private static final double DISTANCE_WEIGHT = 0.6;
+        private static final double HP_WEIGHT = 0.3;
+        private static final double BURIEDNESS_WEIGHT = 0.5;
+        private static final double DAMAGE_WEIGHT = 0.3;
 
         WeightedPrioritySorter(WorldInfo wi, StandardEntity reference) {
             this.reference = reference;
