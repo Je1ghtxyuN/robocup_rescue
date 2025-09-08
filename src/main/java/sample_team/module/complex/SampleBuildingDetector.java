@@ -40,7 +40,7 @@ public class SampleBuildingDetector extends HumanDetector {
         super(ai, wi, si, moduleManager, developData);
         logger = DefaultLogger.getLogger(agentInfo.me());
         this.clustering = moduleManager.getModule("SampleHumanDetector.Clustering",
-                "adf.impl.module.algorithm.KMeansClustering");
+                "sample_team.module.algorithm.KMeansClustering");
         registerModule(this.clustering);
     }
 

@@ -31,7 +31,7 @@ public class SampleRoadDetector extends RoadDetector {
         super(ai, wi, si, moduleManager, developData);
         this.clustering = moduleManager.getModule(
             "SampleRoadDetector.Clustering",
-            "adf.impl.module.algorithm.KMeansClustering");
+            "sample_team.module.algorithm.KMeansClustering");
     }
 
     @Override

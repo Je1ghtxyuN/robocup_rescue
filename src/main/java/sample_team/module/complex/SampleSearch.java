@@ -20,6 +20,9 @@ import adf.core.component.module.algorithm.PathPlanning;
 import adf.core.component.module.complex.Search;
 import adf.core.debug.DefaultLogger;
 
+// 导入自制kmeans聚类
+//import sample_team.module.algorithm.KMeansClustering;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -34,7 +37,8 @@ import java.util.stream.Collectors;
 
 import org.apache.log4j.Logger;
 import rescuecore2.standard.entities.Building;
-//import rescuecore2.standard.entities.Edge;
+import rescuecore2.standard.entities.Area;
+import rescuecore2.standard.entities.Edge;
 import rescuecore2.standard.entities.Road;
 import rescuecore2.standard.entities.StandardEntity;
 import rescuecore2.standard.entities.StandardEntityURN;
@@ -47,7 +51,7 @@ public class SampleSearch extends Search {
      
     // 警察巡逻字段
     private Queue<EntityID> patrolTargets = new LinkedList<>(); // 巡逻点队列
-    private static final int PATROL_RADIUS = 50000; // 巡逻范围(毫米)
+    // private static final int PATROL_RADIUS = 50000; // 巡逻范围(毫米)
 
     private EntityID result;
     private Collection<EntityID> unsearchedBuildingIDs;
@@ -68,20 +72,20 @@ public class SampleSearch extends Search {
                     "adf.impl.module.algorithm.AStarPathPlanning");
             this.clustering = moduleManager.getModule(
                     "SampleSearch.Clustering.Ambulance",
-                    "adf.impl.module.algorithm.KMeansClustering");
+                    "sample_team.module.algorithm.KMeansClustering");
         } else if (agentURN == FIRE_BRIGADE) {
             this.pathPlanning = moduleManager.getModule(
                     "SampleSearch.PathPlanning.Fire",
                     "adf.impl.module.algorithm.DijkstraPathPlanning");
             this.clustering = moduleManager.getModule("SampleSearch.Clustering.Fire",
-                    "adf.impl.module.algorithm.KMeansClustering");
+                    "sample_team.module.algorithm.KMeansClustering");
         } else if (agentURN == POLICE_FORCE) {
             this.pathPlanning = moduleManager.getModule(
                     "SampleSearch.PathPlanning.Police",
                     "adf.impl.module.algorithm.DijkstraPathPlanning");
             this.clustering = moduleManager.getModule(
                     "SampleSearch.Clustering.Police",
-                    "adf.impl.module.algorithm.KMeansClustering");
+                    "sample_team.module.algorithm.KMeansClustering");
         }
         registerModule(this.clustering);
         registerModule(this.pathPlanning);
@@ -91,6 +95,27 @@ public class SampleSearch extends Search {
     public Search updateInfo(MessageManager messageManager) {
         logger.debug("Time:" + agentInfo.getTime());
         super.updateInfo(messageManager);
+
+        EntityID currentPosition = agentInfo.getPosition();
+        StandardEntity currentEntity = worldInfo.getEntity(currentPosition);
+        
+        // 记录当前位置实体
+        if (currentEntity != null) {
+            searchedBuildings.add(currentEntity.getID());
+        }
+        
+        // 记录当前位置所在区域
+        if (currentEntity instanceof Area) {
+            Area currentArea = (Area) currentEntity;
+            for (Edge edge : currentArea.getEdges()) {
+                if (edge.isPassable()) {
+                    EntityID neighbourID = edge.getNeighbour();
+                    if (neighbourID != null) {
+                        searchedBuildings.add(neighbourID);
+                    }
+                }
+            }
+        }
 
         this.unsearchedBuildingIDs
                 .removeAll(this.worldInfo.getChanged().getChangedEntities());
@@ -228,30 +253,82 @@ public class SampleSearch extends Search {
     // 生成环形巡逻路线
     private void generatePatrolRoute() {
         // 1. 获取聚类中心点
-        int clusterIndex = clustering.getClusterIndex(agentInfo.getID());
-        StandardEntity center = clustering.getClusterCenter(clusterIndex);
+        int clusterIndex = clustering.getClusterIndex(agentInfo.getID());  
         
-        // 2. 在聚类区域内选择4个道路作为巡逻点
+        // 2. 获取聚类区域内所有道路和建筑
         Collection<StandardEntity> clusterEntities = clustering.getClusterEntities(clusterIndex);
+
         List<Road> roads = clusterEntities.stream()
             .filter(e -> e instanceof Road)
             .map(e -> (Road)e)
             .collect(Collectors.toList());
+
+        List<Building> buildings = clusterEntities.stream()
+        .filter(e -> e instanceof Building && e.getStandardURN() != REFUGE)
+        .map(e -> (Building) e)
+        .collect(Collectors.toList());    
         
-        // 3. 按距离中心点排序并选择
+        // 3. 按探索价值排序（优先未搜索区域）
         roads.sort(Comparator.comparingInt(
-            r -> worldInfo.getDistance(center.getID(), r.getID())
+            r -> calculateExplorationValue(r.getID())
+        ));
+
+        buildings.sort(Comparator.comparingInt(
+            b -> calculateExplorationValue(b.getID())
         ));
         
-        // 4. 选取前4个道路加入巡逻队列
-        patrolTargets.clear();
-        roads.stream()
+        // 4. 创建混合巡逻点列表（道路和建筑）
+        List<EntityID> patrolPoints = new ArrayList<>();
+    
+        // 添加未搜索的建筑（最多4个）
+        buildings.stream()
+            .filter(b -> !searchedBuildings.contains(b.getID()))
             .limit(4)
-            .map(Road::getID)
-            .forEach(patrolTargets::add);
+            .map(Building::getID)
+            .forEach(patrolPoints::add);
         
-        // 5. 日志记录
-        logger.debug("Generated patrol route: " + patrolTargets);
+        // 添加价值最高的道路（最多8个，包括远近不同的道路）
+        int roadCount = Math.min(8, roads.size());
+        for (int i = 0; i < roadCount; i++) {
+            // 选择不同距离的道路：前2个最近，中间4个中等距离，最后2个最远
+            int index;
+            if (i < 2) index = i; // 最近
+            else if (i < 6) index = i * roads.size() / 6; // 中等
+            else index = roads.size() - (roadCount - i); // 最远
+            
+            if (index < roads.size()) {
+                patrolPoints.add(roads.get(index).getID());
+            }
+        }
+        
+        // 5. 随机打乱顺序避免固定模式
+        Collections.shuffle(patrolPoints);
+        
+        // 6. 加入巡逻队列
+        patrolTargets.clear();
+        patrolTargets.addAll(patrolPoints);
+        
+        // 7. 日志记录
+        logger.debug("Generated expanded patrol route: " + patrolTargets);
+    }
+
+    // 计算区域的探索价值（数值越低表示越需要探索）
+    private int calculateExplorationValue(EntityID areaID) {
+        int value = 0;
+        
+        // 1. 优先未搜索区域：从未搜索过的区域价值最低
+        if (!searchedBuildings.contains(areaID)) {
+            value -= 1000; // 大幅降低值，使其排在前列
+        }
+        
+        // 2. 考虑距离：较远的区域价值稍低
+        int distance = worldInfo.getDistance(agentInfo.getPosition(), areaID);
+        value += distance / 100; // 每100米增加1点值
+        
+        // 3. 上次访问时间：长时间未访问的区域价值低
+        // （这里简化处理，实际可以记录每个区域的最后访问时间）
+        
+        return value;
     }
 
 
