@@ -1,5 +1,6 @@
 package sample_team.module.complex;
 
+import static rescuecore2.standard.entities.StandardEntityURN.AMBULANCE_TEAM;
 import static rescuecore2.standard.entities.StandardEntityURN.CIVILIAN;
 import static rescuecore2.standard.entities.StandardEntityURN.REFUGE;
 import static rescuecore2.standard.entities.StandardEntityURN.FIRE_BRIGADE;
@@ -22,6 +23,13 @@ import rescuecore2.standard.entities.Human;
 import rescuecore2.standard.entities.StandardEntity;
 import rescuecore2.standard.entities.StandardEntityURN;
 import rescuecore2.worldmodel.EntityID;
+import rescuecore2.standard.entities.Blockade;
+import rescuecore2.standard.entities.Building;
+import rescuecore2.standard.entities.Edge;
+import rescuecore2.standard.entities.Road;
+import java.awt.geom.Line2D;
+import java.awt.geom.Area;
+import java.awt.Shape;
 
 public class FireHumanDetector extends HumanDetector {
 
@@ -218,11 +226,69 @@ public class FireHumanDetector extends HumanDetector {
     StandardEntity position = worldInfo.getPosition(target);
     if (position == null)
         return false;
+    
+    if (position instanceof Building && hasBlockedEntrance((Building) position)) {
+        logger.debug("Invalid due to blocked entrance: " + target);
+        return false;
+    }
 
-        StandardEntityURN positionURN = position.getStandardURN();
-        if (positionURN == REFUGE )
+    StandardEntityURN positionURN = position.getStandardURN();
+    if (positionURN == REFUGE || positionURN == AMBULANCE_TEAM)
             return false;
 
-        return true;
+    return true;
+}
+
+    // 新增方法：检查建筑物入口是否被阻挡
+    private boolean hasBlockedEntrance(Building building) {
+        for (Edge edge : getEntranceEdges(building)) {
+            EntityID roadID = edge.getNeighbour();
+            if (roadID == null) continue;
+            
+            StandardEntity road = worldInfo.getEntity(roadID);
+            if (!(road instanceof Road)) continue;
+            
+            Road roadEntity = (Road) road;
+            if (!roadEntity.isBlockadesDefined()) continue;
+            
+            for (EntityID blockadeID : roadEntity.getBlockades()) {
+                StandardEntity entity = worldInfo.getEntity(blockadeID);
+                if (!(entity instanceof Blockade)) continue;
+                
+                Blockade blockade = (Blockade) entity;
+                if (coversEdge(blockade, edge)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
+
+    // 新增方法：获取建筑物的入口边
+    private List<Edge> getEntranceEdges(Building building) {
+        List<Edge> entrances = new ArrayList<>();
+        for (Edge edge : building.getEdges()) {
+            if (edge.isPassable()) {
+                entrances.add(edge);
+            }
+        }
+        return entrances;
+    }
+
+    // 新增方法：检查障碍物是否覆盖边
+    private boolean coversEdge(Blockade blockade, Edge edge) {
+        try {
+            Shape blockadeShape = blockade.getShape();
+            Area blockadeArea = new Area(blockadeShape);
+            Line2D edgeLine = new Line2D.Double(
+                edge.getStartX(), edge.getStartY(),
+                edge.getEndX(), edge.getEndY()
+            );
+            return blockadeArea.intersects(edgeLine.getBounds2D());
+        } catch (Exception e) {
+            logger.error("Error checking edge coverage", e);
+        }
+        return false;
+    }
+
 }
