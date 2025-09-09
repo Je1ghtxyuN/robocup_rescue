@@ -20,19 +20,18 @@ import adf.core.component.module.algorithm.PathPlanning;
 import adf.core.component.module.complex.Search;
 import adf.core.debug.DefaultLogger;
 
-// 导入自制kmeans聚类
-//import sample_team.module.algorithm.KMeansClustering;
-
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
 import java.util.Set;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.apache.log4j.Logger;
@@ -51,7 +50,6 @@ public class SampleSearch extends Search {
      
     // 警察巡逻字段
     private Queue<EntityID> patrolTargets = new LinkedList<>(); // 巡逻点队列
-    // private static final int PATROL_RADIUS = 50000; // 巡逻范围(毫米)
 
     private EntityID result;
     private Collection<EntityID> unsearchedBuildingIDs;
@@ -59,6 +57,8 @@ public class SampleSearch extends Search {
     private Set<EntityID> searchedBuildings = new HashSet<>();
     private Set<EntityID> processedBlockades = new HashSet<>(); // 障碍物处理缓存
     private Logger logger;
+
+     private Map<EntityID, EntityID> recoverableTargets = new HashMap<>();  // 记录受阻目标及其关联障碍
 
     public SampleSearch(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager, DevelopData developData) {
         super(ai, wi, si, moduleManager, developData);
@@ -134,6 +134,8 @@ public class SampleSearch extends Search {
         }
 
         updateSearchProgress();
+
+        checkRecoverableTargets();
         
         return this;
     }
@@ -161,72 +163,65 @@ public class SampleSearch extends Search {
     @Override
     public Search calc() {
         this.result = null;
-        StandardEntityURN agentURN = agentInfo.me().getStandardURN(); // 获取代理类型
-        
-        // 非警察智能体保持原始逻辑
-        if (agentURN != POLICE_FORCE) {
-            this.currentTargetBuilding = null; // 重置当前目标建筑
-            
-            if (unsearchedBuildingIDs.isEmpty()) {
-                return this;
-            }
-
-            logger.debug("unsearchedBuildingIDs: " + unsearchedBuildingIDs);
-            
-            // 2. 寻找可达目标
-            Set<EntityID> unreachableTargets = new HashSet<>();
-            List<EntityID> path = null;
-            EntityID selectedTarget = null;
-            
-            for (EntityID candidate : new ArrayList<>(unsearchedBuildingIDs)) {
-                this.pathPlanning.setFrom(this.agentInfo.getPosition());
-                this.pathPlanning.setDestination(Collections.singleton(candidate));
-                path = this.pathPlanning.calc().getResult();
-                
-                if (path != null && !path.isEmpty()) {
-                    selectedTarget = candidate;
-                    break;
-                } else {
-                    unreachableTargets.add(candidate);
-                    logger.debug("Target unreachable: " + candidate);
-                }
-            }
-            
-            // 3. 处理找到的可达目标
-            if (selectedTarget != null) {
-                unsearchedBuildingIDs.remove(selectedTarget);
-                this.currentTargetBuilding = selectedTarget; // 记录当前目标建筑
-                logger.debug("Reachable target found: " + selectedTarget);
-                
-                this.pathPlanning.setFrom(this.agentInfo.getPosition());
-                this.pathPlanning.setDestination(Collections.singleton(selectedTarget));
-                path = this.pathPlanning.calc().getResult();
-                
-                if (path != null && !path.isEmpty()) {
-                    // 5. 设置最终目标点
-                    if (path.size() > 2) {
-                        this.result = path.get(path.size() - 3);
-                    } else {
-                        this.result = path.get(path.size() - 1);
-                    }
-                    logger.debug("Path to target: " + path);
-                }
-            }
-            
-            // 6. 处理不可达目标
-            unsearchedBuildingIDs.removeAll(unreachableTargets);
-            
-            if (this.result == null && unsearchedBuildingIDs.isEmpty()) {
-                logger.debug("No reachable targets - resetting search list");
-                this.reset();
-            }
-            
-            logger.debug("Selected target point: " + result);
+        if (unsearchedBuildingIDs.isEmpty())
             return this;
+
+        StandardEntityURN agentURN = agentInfo.me().getStandardURN(); // 获取代理类型
+
+        logger.debug("unsearchedBuildingIDs: " + unsearchedBuildingIDs);
+        this.pathPlanning.setFrom(this.agentInfo.getPosition());
+        this.pathPlanning.setDestination(this.unsearchedBuildingIDs);
+        List<EntityID> path = this.pathPlanning.calc().getResult();
+        logger.debug("best path is: " + path);
+
+        // 记录原始目标建筑（用于后续恢复）
+        EntityID originalTarget = null;
+        if (path != null && !path.isEmpty()) {
+            originalTarget = path.get(path.size() - 1);
+        }
+        
+        // 当智能体为消防员和救护车时
+        if ((agentURN == AMBULANCE_TEAM || agentURN == FIRE_BRIGADE) 
+             && path != null && path.size() > 1) {
+        // 检测路径上的第一个障碍物
+        EntityID blockedRoad = findFirstBlockedRoadInPath(path);
+        
+        if (blockedRoad != null) {
+            logger.debug("Detected blockade at: " + blockedRoad);
+            
+            if (originalTarget != null) {
+                // 1. 暂时移出当前目标（非永久移除）
+                unsearchedBuildingIDs.remove(originalTarget);
+                
+                // 2. 添加到待恢复列表（障碍清除后可恢复）
+                addToRecoverableTargets(originalTarget, blockedRoad);
+                
+                logger.debug("Temporarily removed target: " + originalTarget);
+            }
+            
+            // 3. 重新规划到剩余目标
+            if (!unsearchedBuildingIDs.isEmpty()) {
+                this.pathPlanning.setFrom(this.agentInfo.getPosition());
+                this.pathPlanning.setDestination(this.unsearchedBuildingIDs);
+                path = this.pathPlanning.calc().getResult();
+                logger.debug("Replanned path: " + path);
+            } else {
+                path = null; // 无有效目标
+            }
+          }
         }
         
         // 当智能体为警察时
-        if (agentInfo.me().getStandardURN() == POLICE_FORCE) {
+        if (agentURN == POLICE_FORCE) {
+
+            // 新增：优先处理视野内障碍物
+            EntityID visibleBlockade = findVisibleBlockade();
+            if (visibleBlockade != null) {
+                this.result = visibleBlockade;
+                processedBlockades.add(visibleBlockade); // 记录已处理
+                return this;
+            }
+
             // 1. 优先处理高优先级障碍
             EntityID blockadeTarget = findPriorityBlockade();
             if (blockadeTarget != null) {
@@ -248,6 +243,74 @@ public class SampleSearch extends Search {
         }
 
         return this;
+    }
+
+    // 检测路径中的第一个障碍物
+    private EntityID findFirstBlockedRoadInPath(List<EntityID> path) {
+        // 从当前位置之后的下一个点开始检查（跳过当前位置）
+        for (int i = 1; i < path.size(); i++) {
+            EntityID eid = path.get(i);
+            StandardEntity entity = worldInfo.getEntity(eid);
+            if (entity instanceof Road) {
+                Road road = (Road) entity;
+                if (road.isBlockadesDefined() && 
+                    !road.getBlockades().isEmpty()) {
+                    return road.getID(); // 返回受阻道路ID
+                }
+            }
+        }
+        return null; // 无阻碍
+    }
+
+    // 添加到待恢复列表
+    private void addToRecoverableTargets(EntityID target, EntityID blockage) {
+        recoverableTargets.put(target, blockage);
+    }
+
+    // 检查可恢复目标
+    private void checkRecoverableTargets() {
+        Iterator<Map.Entry<EntityID, EntityID>> it = recoverableTargets.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<EntityID, EntityID> entry = it.next();
+            EntityID target = entry.getKey();
+            EntityID blockage = entry.getValue();
+            
+            // 检查障碍物是否已清除
+            StandardEntity road = worldInfo.getEntity(blockage);
+            if (road instanceof Road) {
+                Road r = (Road) road;
+                if (!r.isBlockadesDefined() || r.getBlockades().isEmpty()) {
+                    // 障碍已清除，恢复目标
+                    unsearchedBuildingIDs.add(target);
+                    it.remove();
+                    logger.debug("Recovered target: " + target);
+                }
+            }
+        }
+    }
+
+    // 检测视野内障碍物
+    private EntityID findVisibleBlockade() {
+        // 1. 定义视野范围（30米）
+        int viewRange = 30000;
+        
+        // 2. 获取视野范围内的实体
+        Collection<StandardEntity> visibleEntities = worldInfo.getObjectsInRange(
+            agentInfo.getPosition(), viewRange);
+        
+        // 3. 筛选可见的障碍物
+        for (StandardEntity entity : visibleEntities) {
+            if (entity instanceof Road) {
+                Road road = (Road) entity;
+                // 检查道路是否有未处理的障碍物
+                if (road.isBlockadesDefined() && 
+                    !road.getBlockades().isEmpty() &&
+                    !processedBlockades.contains(road.getID())) {
+                    return road.getID();
+                }
+            }
+        }
+        return null;
     }
 
     // 生成环形巡逻路线
@@ -368,7 +431,7 @@ public class SampleSearch extends Search {
         return null;
     }
     
-    // [新增] 路径障碍检查
+    // 路径障碍检查
     private EntityID findBlockadeInPath(List<EntityID> path) {
         if (path == null) return null;
         

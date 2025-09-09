@@ -17,13 +17,25 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+// import java.util.Set;
 
 import org.apache.log4j.Logger;
 
+// import com.fasterxml.jackson.annotation.JsonFormat.Shape;
+
+// import rescuecore2.misc.geometry.Line2D;
+// import rescuecore2.standard.entities.*;
+import rescuecore2.standard.entities.Blockade;
+import rescuecore2.standard.entities.Building;
+import rescuecore2.standard.entities.Edge;
 import rescuecore2.standard.entities.Human;
+import rescuecore2.standard.entities.Road;
 import rescuecore2.standard.entities.StandardEntity;
 import rescuecore2.standard.entities.StandardEntityURN;
 import rescuecore2.worldmodel.EntityID;
+import java.awt.geom.Line2D;
+import java.awt.geom.Area;
+import java.awt.Shape;
 
 public class SampleHumanDetector extends HumanDetector {
 
@@ -36,11 +48,16 @@ public class SampleHumanDetector extends HumanDetector {
     private static final int MAX_DAMAGE = 200;
     private static final int MAX_BURIEDNESS = 100;
 
+    // 可调节的阈值参数inValidHuman
+    private static final int MIN_HP_THRESHOLD = 1000;    // HP低于此值认为无效
+    private static final int MIN_DAMAGE_THRESHOLD = 50;  // 伤害低于此值认为无效
+    private static final int MIN_BURIEDNESS_THRESHOLD = 30; // 掩埋程度高于此值认为无效
+
     public SampleHumanDetector(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager, DevelopData developData) {
         super(ai, wi, si, moduleManager, developData);
         logger = DefaultLogger.getLogger(agentInfo.me());
         this.clustering = moduleManager.getModule("SampleHumanDetector.Clustering",
-                "sample_team.module.algorithm.KMeansClustering");
+                "adf.impl.module.algorithm.KMeansClustering");
         registerModule(this.clustering);
     }
 
@@ -92,17 +109,16 @@ public class SampleHumanDetector extends HumanDetector {
         return selected.getID();
     }
 
-
     // 新的加权优先级排序器
     private class WeightedPrioritySorter implements Comparator<StandardEntity> {
         private StandardEntity reference;
         private WorldInfo worldInfo;
 
         // 权重配置 - 可以根据实际需求调整这些值
-        private static final double DISTANCE_WEIGHT = 0.8;
-        private static final double HP_WEIGHT = 0.1;
-        private static final double BURIEDNESS_WEIGHT = 0.5;
-        private static final double DAMAGE_WEIGHT = 0.3;
+        private static final double DISTANCE_WEIGHT = 0.5;
+        private static final double HP_WEIGHT = 0.2;
+        private static final double BURIEDNESS_WEIGHT = 0.15;
+        private static final double DAMAGE_WEIGHT = 0.15;
 
         WeightedPrioritySorter(WorldInfo wi, StandardEntity reference) {
             this.reference = reference;
@@ -230,14 +246,80 @@ public class SampleHumanDetector extends HumanDetector {
         if (!target.isBuriednessDefined())
             return false;
 
+        // 综合属性检查
+        if (target.getDamage() < MIN_DAMAGE_THRESHOLD && target.getHP() < MIN_HP_THRESHOLD&& target.getBuriedness() > MIN_BURIEDNESS_THRESHOLD ){
+            logger.debug("Invalid due to low damage and HP: " + target);
+            return false;
+        }
+           
+
+
         StandardEntity position = worldInfo.getPosition(target);
         if (position == null)
             return false;
 
+
+       if (position instanceof Building && hasBlockedEntrance((Building) position)) {
+            logger.debug("Invalid due to blocked entrance: " + target);
+            return false;
+        }
         StandardEntityURN positionURN = position.getStandardURN();
         if (positionURN == REFUGE || positionURN == AMBULANCE_TEAM)
             return false;
 
         return true;
     }
+
+        // 新增方法：检查建筑物入口是否被阻挡
+    private boolean hasBlockedEntrance(Building building) {
+        for (Edge edge : getEntranceEdges(building)) {
+            EntityID roadID = edge.getNeighbour();
+            if (roadID == null) continue;
+            
+            StandardEntity road = worldInfo.getEntity(roadID);
+            if (!(road instanceof Road)) continue;
+            
+            Road roadEntity = (Road) road;
+            if (!roadEntity.isBlockadesDefined()) continue;
+            
+            for (EntityID blockadeID : roadEntity.getBlockades()) {
+                StandardEntity entity = worldInfo.getEntity(blockadeID);
+                if (!(entity instanceof Blockade)) continue;
+                
+                Blockade blockade = (Blockade) entity;
+                if (coversEdge(blockade, edge)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // 新增方法：获取建筑物的入口边
+    private List<Edge> getEntranceEdges(Building building) {
+        List<Edge> entrances = new ArrayList<>();
+        for (Edge edge : building.getEdges()) {
+            if (edge.isPassable()) {
+                entrances.add(edge);
+            }
+        }
+        return entrances;
+    }
+
+    // 新增方法：检查障碍物是否覆盖边
+    private boolean coversEdge(Blockade blockade, Edge edge) {
+        try {
+            Shape blockadeShape = blockade.getShape();
+            Area blockadeArea = new Area(blockadeShape);
+            Line2D edgeLine = new Line2D.Double(
+                edge.getStartX(), edge.getStartY(),
+                edge.getEndX(), edge.getEndY()
+            );
+            return blockadeArea.intersects(edgeLine.getBounds2D());
+        } catch (Exception e) {
+            logger.error("Error checking edge coverage", e);
+        }
+        return false;
+    }
+
 }

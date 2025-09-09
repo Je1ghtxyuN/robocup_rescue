@@ -133,27 +133,30 @@ public class SampleRoadDetector extends RoadDetector {
         double refugeFactor = isBlockingRefuge(blockade) ? 3.0 : 1.0;
 
         // 入口因子（在建筑物入口处优先级更高）
-        double entranceFactor = isAtBuildingEntrance(blockade) ? 3.0 : 1.0;
+        double entranceFactor = isAtBuildingEntrance(blockade) ? 4.0 : 1.0;
+
+        // 主干道因子: 如果障碍物在主干道上，优先级更高
+        double mainRoadFactor = isOnMainRoad(blockade) ? 2.0 : 1.0;
 
         // 聚集惩罚因子
-        double concentrationPenalty = calculateConcentrationPenalty(position);
+        double concentrationPenalty = calculateConcentrationPenalty(blockade.getPosition());
         
-        return visibilityFactor * entranceFactor * refugeFactor * concentrationPenalty;
+        return visibilityFactor * entranceFactor * refugeFactor * concentrationPenalty * mainRoadFactor;
     }
 
-    // ===== 新增方法：计算聚集惩罚因子 =====
-    private double calculateConcentrationPenalty(EntityID myPosition) {
-        // 1. 获取周围警察数量
-        int nearbyPolice = getNearbyPoliceCount(myPosition, 30000); // 30米范围内
+    // 计算聚集惩罚因子
+    private double calculateConcentrationPenalty(EntityID blockadePosition) {
+        // 1. 获取障碍物周围的警察数量
+        int nearbyPolice = getNearbyPoliceCount(blockadePosition, 20000); // 30米范围内
         
         // 2. 计算聚集惩罚（警察越多惩罚越大）
         // 公式：1.0 / (1 + e^(0.5 * (count - 2))) 
-        // 解释：当周围警察>2人时，惩罚开始明显；5人时惩罚约为0.1
+        // 解释：当障碍物周围警察>2人时，惩罚开始明显；5人时惩罚约为0.1
         return 1.0 / (1 + Math.exp(0.5 * (nearbyPolice - 2)));
     }
 
     // ===== 新增方法：获取周围警察数量 =====
-    private int getNearbyPoliceCount(EntityID myPosition, int radius) {
+    private int getNearbyPoliceCount(EntityID blockadePosition, int radius) {
         int count = 0;
         
         // 1. 获取所有警察实体
@@ -161,13 +164,13 @@ public class SampleRoadDetector extends RoadDetector {
             StandardEntityURN.POLICE_FORCE
         );
         
-        // 2. 检查每个警察是否在范围内（排除自己）
+        // 2. 检查每个警察是否在障碍物周围范围内
         for (StandardEntity police : allPolice) {
             // 跳过自己
             if (police.getID().equals(agentInfo.getID())) continue;
             
-            // 计算距离
-            int distance = worldInfo.getDistance(myPosition, police.getID());
+            // 计算警察到障碍物的距离
+            int distance = worldInfo.getDistance(blockadePosition, police.getID());
             
             // 如果在范围内则计数
             if (distance <= radius && distance >= 0) {
@@ -395,5 +398,73 @@ public class SampleRoadDetector extends RoadDetector {
             }
         }
         return false; // 未找到匹配，障碍物不影响避难所
+    }
+
+
+
+
+
+
+
+
+   // 新增主干道判断方法
+    private boolean isOnMainRoad(Blockade blockade) {
+        if (!blockade.isPositionDefined()) return false;
+        
+        // 获取障碍物所在的道路
+        EntityID roadId = blockade.getPosition();
+        StandardEntity roadEntity = worldInfo.getEntity(roadId);
+        
+        if (!(roadEntity instanceof Road)) return false;
+        
+        return isMainRoad((Road) roadEntity, worldInfo);
+    }
+
+    // 主干道判断核心逻辑
+    private boolean isMainRoad(Road road, WorldInfo worldInfo) {
+        // 1. 高连通性检测
+        int neighborThreshold = calculateNeighborThreshold(worldInfo);
+        if (road.getNeighbours().size() >= neighborThreshold) {
+            return true;
+        }
+        
+        // 2. 连接关键建筑检测
+        return isConnectedToCriticalBuildings(road, worldInfo);
+    }
+
+    // 计算动态邻居阈值
+    private int calculateNeighborThreshold(WorldInfo worldInfo) {
+        // 获取所有道路
+        Collection<StandardEntity> roads = worldInfo.getEntitiesOfType(StandardEntityURN.ROAD);
+        
+        // 计算平均邻居数
+        double avgNeighbors = roads.stream()
+            .mapToInt(road -> ((Road) road).getNeighbours().size())
+            .average()
+            .orElse(3);
+        
+        // 返回平均值的1.5倍作为阈值
+        return (int) Math.ceil(avgNeighbors * 1.5);
+    }
+
+    // 检查是否连接关键建筑
+    private boolean isConnectedToCriticalBuildings(Road road, WorldInfo worldInfo) {
+        // 关键建筑类型
+        Set<StandardEntityURN> criticalTypes = new HashSet<>(Arrays.asList(
+            StandardEntityURN.FIRE_STATION,
+            StandardEntityURN.POLICE_OFFICE,
+            StandardEntityURN.AMBULANCE_CENTRE,
+            StandardEntityURN.REFUGE
+        ));
+        
+        // 检查道路是否连接任何关键建筑
+        for (StandardEntityURN type : criticalTypes) {
+            for (StandardEntity building : worldInfo.getEntitiesOfType(type)) {
+                if (!road.getEdgesTo(building.getID()).isEmpty()) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 }
