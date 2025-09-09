@@ -20,6 +20,13 @@ import java.awt.Shape;
 
 public class SampleRoadDetector extends RoadDetector {
 
+    // 新增字段：当前锁定的目标及锁定时间
+    private EntityID lockedTarget = null;
+    private int lockStartTime = -1;
+    private static final int LOCK_TIMEOUT = 20; // 锁定超时时间（秒）
+    // 新增警察间协调字段
+    private static final Map<EntityID, Integer> globalTargetLocks = new HashMap<>(); // <目标ID, 锁定结束时间>
+
     private Clustering clustering;
     private EntityID result;
     private Map<EntityID, Integer> lastProcessedTime = new HashMap<>();
@@ -36,13 +43,41 @@ public class SampleRoadDetector extends RoadDetector {
 
     @Override
     public SampleRoadDetector updateInfo(MessageManager messageManager) {
+        // 检查锁定目标状态
+        if (lockedTarget != null) {
+            // 情况1：目标已消失（被其他警察处理）
+            if (isTargetCleared(lockedTarget)) {
+                lockedTarget = null;
+                lockStartTime = -1;
+            }
+            // 情况2：锁定超时（处理时间过长）
+            else if (agentInfo.getTime() - lockStartTime > LOCK_TIMEOUT) {
+                lockedTarget = null;
+                lockStartTime = -1;
+            }
+        }
         super.updateInfo(messageManager);
         this.currentTime = agentInfo.getTime();
         return this;
     }
 
+    // 新增目标状态检查方法
+    private boolean isTargetCleared(EntityID targetID) {
+        StandardEntity entity = worldInfo.getEntity(targetID);
+        if (entity instanceof Road) {
+            Road road = (Road) entity;
+            return !road.isBlockadesDefined() || road.getBlockades().isEmpty();
+        }
+        return true;
+    }
+
     @Override
     public SampleRoadDetector calc() {
+         // 优先处理已锁定的目标
+        if (lockedTarget != null && !isTargetCleared(lockedTarget)) {
+            this.result = lockedTarget;
+            return this;
+        }
         EntityID position = agentInfo.getPosition();
         result = null;
         visibleRoads.clear();
@@ -79,6 +114,12 @@ public class SampleRoadDetector extends RoadDetector {
         // 7. 更新处理时间
         if (result != null) {
             lastProcessedTime.put(result, currentTime);
+        }
+
+        // 当选择新目标时进行锁定
+        if (this.result != null) {
+            lockedTarget = this.result;
+            lockStartTime = agentInfo.getTime();
         }
         
         return this;
@@ -123,6 +164,14 @@ public class SampleRoadDetector extends RoadDetector {
         
         // 选择最紧急的障碍物
         this.result = blockades.get(0).getPosition();
+        
+        if (!blockades.isEmpty()) {
+        EntityID selected = blockades.get(0).getPosition();
+        
+        // 更新全局锁定状态
+        globalTargetLocks.put(selected, agentInfo.getTime() + LOCK_TIMEOUT);
+        this.result = selected;
+    }
     }
 
     private double calculatePriority(EntityID position, Blockade blockade) { 
@@ -138,48 +187,53 @@ public class SampleRoadDetector extends RoadDetector {
         // 主干道因子: 如果障碍物在主干道上，优先级更高
         double mainRoadFactor = isOnMainRoad(blockade) ? 2.0 : 1.0;
 
-        // 聚集惩罚因子
-        double concentrationPenalty = calculateConcentrationPenalty(blockade.getPosition());
+        // 新增协调因子：已被其他警察锁定的目标降级
+        double coordinationFactor = 1.0;
+        EntityID roadID = blockade.getPosition();
+        if (globalTargetLocks.containsKey(roadID) && 
+            globalTargetLocks.get(roadID) > agentInfo.getTime()) {
+            coordinationFactor = 0.3; // 被锁定的目标优先级降低
+        }
         
-        return visibilityFactor * entranceFactor * refugeFactor * concentrationPenalty * mainRoadFactor;
+        return visibilityFactor * entranceFactor * refugeFactor * mainRoadFactor * coordinationFactor;
     }
 
     // 计算聚集惩罚因子
-    private double calculateConcentrationPenalty(EntityID blockadePosition) {
-        // 1. 获取障碍物周围的警察数量
-        int nearbyPolice = getNearbyPoliceCount(blockadePosition, 20000); // 30米范围内
+    // private double calculateConcentrationPenalty(EntityID blockadePosition) {
+    //     // 1. 获取障碍物周围的警察数量
+    //     int nearbyPolice = getNearbyPoliceCount(blockadePosition, 20000); // 30米范围内
         
-        // 2. 计算聚集惩罚（警察越多惩罚越大）
-        // 公式：1.0 / (1 + e^(0.5 * (count - 2))) 
-        // 解释：当障碍物周围警察>2人时，惩罚开始明显；5人时惩罚约为0.1
-        return 1.0 / (1 + Math.exp(0.5 * (nearbyPolice - 2)));
-    }
+    //     // 2. 计算聚集惩罚（警察越多惩罚越大）
+    //     // 公式：1.0 / (1 + e^(0.5 * (count - 2))) 
+    //     // 解释：当障碍物周围警察>2人时，惩罚开始明显；5人时惩罚约为0.1
+    //     return 1.0 / (1 + Math.exp(0.5 * (nearbyPolice - 2)));
+    // }
 
     // ===== 新增方法：获取周围警察数量 =====
-    private int getNearbyPoliceCount(EntityID blockadePosition, int radius) {
-        int count = 0;
+    // private int getNearbyPoliceCount(EntityID blockadePosition, int radius) {
+    //     int count = 0;
         
-        // 1. 获取所有警察实体
-        Collection<StandardEntity> allPolice = worldInfo.getEntitiesOfType(
-            StandardEntityURN.POLICE_FORCE
-        );
+    //     // 1. 获取所有警察实体
+    //     Collection<StandardEntity> allPolice = worldInfo.getEntitiesOfType(
+    //         StandardEntityURN.POLICE_FORCE
+    //     );
         
-        // 2. 检查每个警察是否在障碍物周围范围内
-        for (StandardEntity police : allPolice) {
-            // 跳过自己
-            if (police.getID().equals(agentInfo.getID())) continue;
+    //     // 2. 检查每个警察是否在障碍物周围范围内
+    //     for (StandardEntity police : allPolice) {
+    //         // 跳过自己
+    //         if (police.getID().equals(agentInfo.getID())) continue;
             
-            // 计算警察到障碍物的距离
-            int distance = worldInfo.getDistance(blockadePosition, police.getID());
+    //         // 计算警察到障碍物的距离
+    //         int distance = worldInfo.getDistance(blockadePosition, police.getID());
             
-            // 如果在范围内则计数
-            if (distance <= radius && distance >= 0) {
-                count++;
-            }
-        }
+    //         // 如果在范围内则计数
+    //         if (distance <= radius && distance >= 0) {
+    //             count++;
+    //         }
+    //     }
         
-        return count;
-    }
+    //     return count;
+    //}
 
     private boolean isValidBlockade(Blockade blockade) {
         // 基础有效性检查

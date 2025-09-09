@@ -210,6 +210,16 @@ public class SampleSearch extends Search {
             }
           }
         }
+
+        // 非警察或无路径，保持原逻辑
+        if (path != null && path.size() > 2) {
+            this.result = path.get(path.size() - 3);
+        } else if (path != null && path.size() > 0) {
+            this.result = path.get(path.size() - 1);
+        }
+        logger.debug("chose: " + result);
+
+        checkRecoverableTargets();// 检查恢复条件（每次计算时执行）
         
         // 当智能体为警察时
         if (agentURN == POLICE_FORCE) {
