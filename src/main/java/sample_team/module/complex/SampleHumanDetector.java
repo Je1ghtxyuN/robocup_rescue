@@ -251,8 +251,11 @@ public class SampleHumanDetector extends HumanDetector {
             logger.debug("Invalid due to low damage and HP: " + target);
             return false;
         }
-           
 
+        if (target.getBuriedness() == 0){
+            logger.debug("Invalid due to low buriedness: " + target);
+            return false;
+        }
 
         StandardEntity position = worldInfo.getPosition(target);
         if (position == null)
