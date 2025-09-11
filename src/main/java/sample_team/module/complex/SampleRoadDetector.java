@@ -35,11 +35,15 @@ public class SampleRoadDetector extends RoadDetector {
     private Map<EntityID, Integer> lastProcessedTime = new HashMap<>();
     private int currentTime;
     private Set<EntityID> visibleRoads = new HashSet<>();
+ 
+    // 因子权重参数
+    private static final double BASE_VISIBILITY_FACTOR = 1.5;//可见性
+    private static final double BASE_REFUGE_FACTOR = 4.0;//避难所
+    private static final double BASE_ENTRANCE_FACTOR = 3.0;//门
+    private static final double BASE_MAIN_ROAD_FACTOR = 3.0;//主干道
+    private static final double BASE_COORDINATION_FACTOR = 0.3;
     private static final int EMERGENCY_SERVICE_RANGE = 3000000; // 3000米范围内的紧急服务
-    private static final double BASE_EMERGENCY_FACTOR = 3.0; // 基础权重因子
-    // 在类中添加缓存和更新机制
-    // private Map<EntityID, EntityID> cachedFirePositions = new HashMap<>();
-    // private Map<EntityID, EntityID> cachedAmbulancePositions = new HashMap<>();
+    private static final double BASE_EMERGENCY_FACTOR = 3.0; // 跟随救护消防（似乎没用）
 
     public SampleRoadDetector(AgentInfo ai, WorldInfo wi, ScenarioInfo si,
                             ModuleManager moduleManager, DevelopData developData) {
@@ -187,30 +191,30 @@ public class SampleRoadDetector extends RoadDetector {
 
     private double calculatePriority(EntityID position, Blockade blockade) { 
         // 可见性因子（当前视野内优先级更高）
-        double visibilityFactor = (visibleRoads.contains(blockade.getPosition())) ? 1.5: 1.0;
+        double visibilityFactor = (visibleRoads.contains(blockade.getPosition())) ? BASE_VISIBILITY_FACTOR : 1.0;
 
         // 避难所阻挡因子（新增）: 如果障碍物阻挡避难所，则赋予更高权重
-        double refugeFactor = isBlockingRefuge(blockade) ? 4.0 : 1.0;
+        double refugeFactor = isBlockingRefuge(blockade) ? BASE_REFUGE_FACTOR : 1.0;
 
         // 入口因子（在建筑物入口处优先级更高）
-        double entranceFactor = isAtBuildingEntrance(blockade) ? 3.0 : 1.0;
+        double entranceFactor = isAtBuildingEntrance(blockade) ? BASE_ENTRANCE_FACTOR : 1.0;
 
         // 主干道因子: 如果障碍物在主干道上，优先级更高
-        double mainRoadFactor = isOnMainRoad(blockade) ? 3.0 : 1.0;
+        double mainRoadFactor = isOnMainRoad(blockade) ? BASE_MAIN_ROAD_FACTOR : 1.0;
 
        // 新增协调因子：已被其他警察锁定的目标降级
         double coordinationFactor = 1.0;
         EntityID roadID = blockade.getPosition();
         if (globalTargetLocks.containsKey(roadID) && 
             globalTargetLocks.get(roadID) > agentInfo.getTime()) {
-            coordinationFactor = 0.3; // 被锁定的目标优先级降低
+            coordinationFactor = BASE_COORDINATION_FACTOR; // 被锁定的目标优先级降低
         }
         
         // 紧急因子
         double emergencyServiceFactor = calculateEmergencyServiceFactor(blockade.getPosition());
 
         return visibilityFactor * entranceFactor * refugeFactor * 
-           mainRoadFactor * coordinationFactor* emergencyServiceFactor;
+           mainRoadFactor * coordinationFactor * emergencyServiceFactor;
            
     }
     
