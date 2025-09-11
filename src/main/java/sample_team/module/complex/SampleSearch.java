@@ -60,6 +60,8 @@ public class SampleSearch extends Search {
 
      private Map<EntityID, EntityID> recoverableTargets = new HashMap<>();  // 记录受阻目标及其关联障碍
 
+    private MessageManager messageManager;
+
     public SampleSearch(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager, DevelopData developData) {
         super(ai, wi, si, moduleManager, developData);
         logger = DefaultLogger.getLogger(agentInfo.me());
@@ -93,6 +95,7 @@ public class SampleSearch extends Search {
 
     @Override
     public Search updateInfo(MessageManager messageManager) {
+        this.messageManager = messageManager;
         logger.debug("Time:" + agentInfo.getTime());
         super.updateInfo(messageManager);
 
@@ -161,99 +164,147 @@ public class SampleSearch extends Search {
     }
 
     @Override
-    public Search calc() {
-        this.result = null;
-        if (unsearchedBuildingIDs.isEmpty())
-            return this;
-
-        StandardEntityURN agentURN = agentInfo.me().getStandardURN(); // 获取代理类型
-
-        logger.debug("unsearchedBuildingIDs: " + unsearchedBuildingIDs);
-        this.pathPlanning.setFrom(this.agentInfo.getPosition());
-        this.pathPlanning.setDestination(this.unsearchedBuildingIDs);
-        List<EntityID> path = this.pathPlanning.calc().getResult();
-        logger.debug("best path is: " + path);
-
-        // 记录原始目标建筑（用于后续恢复）
-        EntityID originalTarget = null;
-        if (path != null && !path.isEmpty()) {
-            originalTarget = path.get(path.size() - 1);
-        }
-        
-        // 当智能体为消防员和救护车时
-        if ((agentURN == AMBULANCE_TEAM || agentURN == FIRE_BRIGADE) 
-             && path != null && path.size() > 1) {
-        // 检测路径上的第一个障碍物
-        EntityID blockedRoad = findFirstBlockedRoadInPath(path);
-        
-        if (blockedRoad != null) {
-            logger.debug("Detected blockade at: " + blockedRoad);
-            
-            if (originalTarget != null) {
-                // 1. 暂时移出当前目标（非永久移除）
-                unsearchedBuildingIDs.remove(originalTarget);
-                
-                // 2. 添加到待恢复列表（障碍清除后可恢复）
-                addToRecoverableTargets(originalTarget, blockedRoad);
-                
-                logger.debug("Temporarily removed target: " + originalTarget);
-            }
-            
-            // 3. 重新规划到剩余目标
-            if (!unsearchedBuildingIDs.isEmpty()) {
-                this.pathPlanning.setFrom(this.agentInfo.getPosition());
-                this.pathPlanning.setDestination(this.unsearchedBuildingIDs);
-                path = this.pathPlanning.calc().getResult();
-                logger.debug("Replanned path: " + path);
-            } else {
-                path = null; // 无有效目标
-            }
-          }
-        }
-
-        // 非警察或无路径，保持原逻辑
-        if (path != null && path.size() > 2) {
-            this.result = path.get(path.size() - 3);
-        } else if (path != null && path.size() > 0) {
-            this.result = path.get(path.size() - 1);
-        }
-        logger.debug("chose: " + result);
-
-        checkRecoverableTargets();// 检查恢复条件（每次计算时执行）
-        
-        // 当智能体为警察时
-        if (agentURN == POLICE_FORCE) {
-
-            // 新增：优先处理视野内障碍物
-            EntityID visibleBlockade = findVisibleBlockade();
-            if (visibleBlockade != null) {
-                this.result = visibleBlockade;
-                processedBlockades.add(visibleBlockade); // 记录已处理
-                return this;
-            }
-
-            // 1. 优先处理高优先级障碍
-            EntityID blockadeTarget = findPriorityBlockade();
-            if (blockadeTarget != null) {
-                this.result = blockadeTarget;
-                return this;
-            }
-
-            // 2. 没有障碍物时执行巡逻
-            if (this.patrolTargets.isEmpty()) {
-                generatePatrolRoute(); // 生成巡逻路线
-            }
-
-            // 3. 获取下一个巡逻点
-            EntityID nextPatrolPoint = this.patrolTargets.poll();
-            if (nextPatrolPoint != null) {
-                this.patrolTargets.add(nextPatrolPoint); // 循环队列
-                this.result = nextPatrolPoint;
-            }
-        }
-
+public Search calc() {
+    this.result = null;
+    if (unsearchedBuildingIDs.isEmpty())
         return this;
+
+    StandardEntityURN agentURN = agentInfo.me().getStandardURN(); // 获取代理类型
+
+    logger.debug("unsearchedBuildingIDs: " + unsearchedBuildingIDs);
+    this.pathPlanning.setFrom(this.agentInfo.getPosition());
+    this.pathPlanning.setDestination(this.unsearchedBuildingIDs);
+    List<EntityID> path = this.pathPlanning.calc().getResult();
+    logger.debug("best path is: " + path);
+
+    // 记录原始目标建筑（用于后续恢复）
+    EntityID originalTarget = null;
+    if (path != null && !path.isEmpty()) {
+        originalTarget = path.get(path.size() - 1);
     }
+    
+    // 当智能体为消防员和救护车时
+    if ((agentURN == AMBULANCE_TEAM || agentURN == FIRE_BRIGADE) 
+         && path != null && path.size() > 1) {
+    // 检测路径上的第一个障碍物
+    EntityID blockedRoad = findFirstBlockedRoadInPath(path);
+    
+    if (blockedRoad != null) {
+        logger.debug("Detected blockade at: " + blockedRoad);
+        
+        if (originalTarget != null) {
+            // 1. 暂时移出当前目标（非永久移除）
+            unsearchedBuildingIDs.remove(originalTarget);
+            
+            // 2. 添加到待恢复列表（障碍清除后可恢复）
+            addToRecoverableTargets(originalTarget, blockedRoad);
+            
+            logger.debug("Temporarily removed target: " + originalTarget);
+        }
+        
+        // 3. 重新规划到剩余目标
+        if (!unsearchedBuildingIDs.isEmpty()) {
+            this.pathPlanning.setFrom(this.agentInfo.getPosition());
+            this.pathPlanning.setDestination(this.unsearchedBuildingIDs);
+            path = this.pathPlanning.calc().getResult();
+            logger.debug("Replanned path: " + path);
+        } else {
+            path = null; // 无有效目标
+        }
+      }
+    }
+
+    // 非警察或无路径，保持原逻辑
+    if (path != null && path.size() > 2) {
+        this.result = path.get(path.size() - 3);
+    } else if (path != null && path.size() > 0) {
+        this.result = path.get(path.size() - 1);
+    }
+    logger.debug("chose: " + result);
+
+    checkRecoverableTargets();// 检查恢复条件（每次计算时执行）
+    
+    // 当智能体为警察时
+    if (agentURN == POLICE_FORCE) {
+        // ========== 新增：警察救援目标协调逻辑 ==========
+        // 1. 获取HumanDetector模块实例
+        PoliceHumanDetector humanDetector = (PoliceHumanDetector) moduleManager.getModule(
+            "DefaultTacticsPoliceForce.HumanDetector",
+            "sample_team.module.complex.PoliceHumanDetector");
+        humanDetector.updateInfo(this.messageManager).calc();
+        EntityID rescueTarget = humanDetector.getTarget();
+        
+        // 2. 获取RoadDetector模块实例
+        SampleRoadDetector roadDetector = (SampleRoadDetector) moduleManager.getModule(
+            "DefaultTacticsPoliceForce.RoadDetector",
+            "sample_team.module.complex.SampleRoadDetector");
+        
+        // 3. 设置救援目标给RoadDetector
+        roadDetector.setRescueTarget(rescueTarget);
+        
+        // 4. 处理救援目标逻辑
+        if (rescueTarget != null) {
+            // 4.1 检查建筑物入口是否畅通
+            boolean entranceClear = roadDetector.isBuildingEntranceClear(rescueTarget);
+            
+            if (!entranceClear) {
+                // 4.2 查找入口障碍物
+                roadDetector.updateInfo(this.messageManager).calc();
+                EntityID entranceBlockade = roadDetector.getTarget();
+                
+                if (entranceBlockade != null) {
+                    this.result = entranceBlockade;
+                    logger.debug("Clearing entrance blockade: " + entranceBlockade);
+                    return this;
+                }
+            }
+            
+            // 4.3 查找通往救援目标的路径障碍
+            EntityID pathBlockade = roadDetector.findPathBlockadeToRescueTarget();
+            if (pathBlockade != null) {
+                this.result = pathBlockade;
+                logger.debug("Clearing path blockade: " + pathBlockade);
+                return this;
+            }
+            
+            // 4.4 没有障碍物，直接前往救援目标
+            this.result = rescueTarget;
+            logger.debug("Moving directly to rescue target: " + rescueTarget);
+            return this;
+        }
+        // ========== 结束新增 ==========
+
+        // 原有逻辑（当没有救援目标时执行）
+        // 新增：优先处理视野内障碍物
+        EntityID visibleBlockade = findVisibleBlockade();
+        if (visibleBlockade != null) {
+            this.result = visibleBlockade;
+            processedBlockades.add(visibleBlockade); // 记录已处理
+            return this;
+        }
+
+        // 1. 优先处理高优先级障碍
+        EntityID blockadeTarget = findPriorityBlockade();
+        if (blockadeTarget != null) {
+            this.result = blockadeTarget;
+            return this;
+        }
+
+        // 2. 没有障碍物时执行巡逻
+        if (this.patrolTargets.isEmpty()) {
+            generatePatrolRoute(); // 生成巡逻路线
+        }
+
+        // 3. 获取下一个巡逻点
+        EntityID nextPatrolPoint = this.patrolTargets.poll();
+        if (nextPatrolPoint != null) {
+            this.patrolTargets.add(nextPatrolPoint); // 循环队列
+            this.result = nextPatrolPoint;
+        }
+    }
+
+    return this;
+}
 
     // 检测路径中的第一个障碍物
     private EntityID findFirstBlockedRoadInPath(List<EntityID> path) {

@@ -7,6 +7,7 @@ import adf.core.agent.info.ScenarioInfo;
 import adf.core.agent.info.WorldInfo;
 import adf.core.agent.module.ModuleManager;
 import adf.core.component.module.algorithm.Clustering;
+import adf.core.component.module.algorithm.PathPlanning;
 import adf.core.component.module.complex.RoadDetector;
 // 消防员
 // 救护队
@@ -35,6 +36,8 @@ public class SampleRoadDetector extends RoadDetector {
     private Map<EntityID, Integer> lastProcessedTime = new HashMap<>();
     private int currentTime;
     private Set<EntityID> visibleRoads = new HashSet<>();
+
+    private EntityID rescueTarget; // 来自HumanDetector的目标
  
     // 因子权重参数
     private static final double BASE_VISIBILITY_FACTOR = 1.5;//可见性
@@ -86,6 +89,15 @@ public class SampleRoadDetector extends RoadDetector {
 
     @Override
     public SampleRoadDetector calc() {
+
+        // 优先处理通往救援目标路径上的障碍
+        if (rescueTarget != null) {
+            EntityID pathBlockade = findPathBlockadeToRescueTarget();
+            if (pathBlockade != null) {
+                this.result = pathBlockade;
+                return this;
+            }
+        }
         // 优先处理已锁定的目标
         if (lockedTarget != null && !isTargetCleared(lockedTarget)) {
             this.result = lockedTarget;
@@ -602,6 +614,63 @@ public class SampleRoadDetector extends RoadDetector {
         
         return emergencyBlockades;
     }
+    
+    public void setRescueTarget(EntityID rescueTarget) {
+        this.rescueTarget = rescueTarget;
+    }
 
+// 新增方法：查找通往救援目标路径上的障碍
+    public EntityID findPathBlockadeToRescueTarget() {
+        if (rescueTarget == null) return null;
+        
+        // 计算到救援目标的路径
+        PathPlanning pathPlanner = moduleManager.getModule(
+            "SampleRoadDetector.PathPlanning",
+            "adf.impl.module.algorithm.AStarPathPlanning");
+        pathPlanner.setFrom(agentInfo.getPosition());
+        pathPlanner.setDestination(rescueTarget);
+        List<EntityID> path = pathPlanner.calc().getResult();
+        
+        if (path == null) return null;
+        
+        // 查找路径上的第一个障碍
+        for (EntityID roadId : path) {
+            StandardEntity road = worldInfo.getEntity(roadId);
+            if (road instanceof Road) {
+                Road r = (Road) road;
+                if (r.isBlockadesDefined() && !r.getBlockades().isEmpty()) {
+                    return r.getID();
+                }
+            }
+        }
+        return null;
+    }
+    
+    // 新增方法：检查建筑物入口障碍是否已清除
+    public boolean isBuildingEntranceClear(EntityID buildingId) {
+        StandardEntity entity = worldInfo.getEntity(buildingId);
+        if (!(entity instanceof Building)) return false;
+        
+        Building building = (Building) entity;
+        for (Edge edge : getEntranceEdges(building, worldInfo)) {
+            EntityID roadID = edge.getNeighbour();
+            if (roadID == null) continue;
+            
+            StandardEntity road = worldInfo.getEntity(roadID);
+            if (!(road instanceof Road)) continue;
+            
+            Road roadEntity = (Road) road;
+            if (!roadEntity.isBlockadesDefined()) continue;
+            
+            for (EntityID blockadeID : roadEntity.getBlockades()) {
+                StandardEntity blockadeEntity = worldInfo.getEntity(blockadeID);
+                if (blockadeEntity instanceof Blockade) {
+                    // 发现入口处仍有障碍物
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
 
 }
