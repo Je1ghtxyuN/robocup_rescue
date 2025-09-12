@@ -17,21 +17,21 @@ import java.util.stream.Collectors;
 
 public class SampleRoadDetector extends RoadDetector {
 
-    // 属性最大值常量
-    private static final int MAX_HP = 10000;
-    private static final int MAX_DAMAGE = 200;
-    private static final int MAX_BURIEDNESS = 100;
+    // 属性最大值常量（用于归一化计算）
+    private static final int MAX_HP = 10000; // 最大生命值（用于计算生命值评分）
+    private static final int MAX_DAMAGE = 200; // 最大伤害值（用于计算伤害评分）
+    private static final int MAX_BURIEDNESS = 100; // 最大掩埋程度（用于计算掩埋程度评分）
 
-    // 可调节的阈值参数
-    private static final int MIN_HP_THRESHOLD = 1000;
-    private static final int MIN_DAMAGE_THRESHOLD = 50;
-    private static final int MIN_BURIEDNESS_THRESHOLD = 30;
+    // 可调节的阈值参数（用于过滤无效目标）
+    private static final int MIN_HP_THRESHOLD = 1000; // 最小生命值阈值：低于此值的伤员可能无需立即救援
+    private static final int MIN_DAMAGE_THRESHOLD = 50; // 最小伤害阈值：低于此值的伤员可能伤势较轻
+    private static final int MIN_BURIEDNESS_THRESHOLD = 30; // 最小掩埋程度阈值：低于此值的伤员可能未被掩埋或掩埋较浅
 
-    // 权重配置
-    private static final double DISTANCE_WEIGHT = 0.5;
-    private static final double HP_WEIGHT = 0.2;
-    private static final double BURIEDNESS_WEIGHT = 0.15;
-    private static final double DAMAGE_WEIGHT = 0.15;
+    // 权重配置（影响目标选择的优先级）
+    private static final double DISTANCE_WEIGHT = 0.5; // 距离权重：距离越近的目标优先级越高（最高权重）
+    private static final double HP_WEIGHT = 0.2; // 生命值权重：生命值越低的目标优先级越高
+    private static final double BURIEDNESS_WEIGHT = 0.15; // 掩埋程度权重：掩埋程度越高的目标优先级越高
+    private static final double DAMAGE_WEIGHT = 0.15; // 伤害权重：伤害值越高的目标优先级越高
 
     private Clustering clustering;
     private EntityID result;
