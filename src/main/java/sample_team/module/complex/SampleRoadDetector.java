@@ -43,6 +43,11 @@ public class SampleRoadDetector extends RoadDetector {
     private Set<EntityID> contactedHumans = new HashSet<>();
     // 新增：当前目标伤员
     private EntityID currentTargetHuman = null;
+    
+    // 新增：防止警察聚集的共享状态
+    private static final Map<EntityID, EntityID> reservedTargets = new HashMap<>();
+    private static final Map<EntityID, Integer> reservationTimes = new HashMap<>();
+    private static final int RESERVATION_TIMEOUT = 30; // 30时间单位后保留失效
 
     public SampleRoadDetector(AgentInfo ai, WorldInfo wi, ScenarioInfo si,
                             ModuleManager moduleManager, DevelopData developData) {
@@ -66,10 +71,15 @@ public class SampleRoadDetector extends RoadDetector {
                 // 检查是否在伤员所在的位置
                 if (agentInfo.getPosition().equals(human.getPosition())) {
                     contactedHumans.add(currentTargetHuman);
+                    // 释放目标保留
+                    releaseReservedTarget(currentTargetHuman);
                     currentTargetHuman = null; // 清除当前目标
                 }
             }
         }
+        
+        // 清理过期的目标保留
+        cleanupExpiredReservations();
         
         return this;
     }
@@ -112,23 +122,79 @@ public class SampleRoadDetector extends RoadDetector {
             // 使用加权评分系统选择最佳目标
             targets.sort(new WeightedPrioritySorter(worldInfo, agentInfo.me()));
             
-            // 从高优先级目标中选取第一个未接触过的
+            // 从高优先级目标中选取第一个未接触过且未被其他警察保留的目标
             for (Human human : targets) {
-                if (!contactedHumans.contains(human.getID())) {
+                EntityID humanId = human.getID();
+                if (!contactedHumans.contains(humanId) && !isReservedByOtherPolice(humanId)) {
+                    // 保留这个目标
+                    reserveTarget(humanId);
                     this.result = human.getPosition();
-                    this.currentTargetHuman = human.getID(); // 设置当前目标伤员
+                    this.currentTargetHuman = humanId; // 设置当前目标伤员
                     break;
                 }
             }
             
-            // 如果所有目标都已接触过，选择优先级最高的
+            // 如果所有目标都已接触过或被保留，选择优先级最高的可用目标
             if (this.result == null && !targets.isEmpty()) {
-                this.result = targets.get(0).getPosition();
-                this.currentTargetHuman = targets.get(0).getID();
+                for (Human human : targets) {
+                    EntityID humanId = human.getID();
+                    if (!isReservedByOtherPolice(humanId)) {
+                        reserveTarget(humanId);
+                        this.result = human.getPosition();
+                        this.currentTargetHuman = humanId;
+                        break;
+                    }
+                }
+            }
+            
+            // 如果仍然没有找到目标，使用聚类方法
+            if (this.result == null) {
+                detectUsingClustering();
             }
         }
         
         return this;
+    }
+
+    // 新增：检查目标是否被其他警察保留
+    private boolean isReservedByOtherPolice(EntityID humanId) {
+        EntityID reservingPolice = reservedTargets.get(humanId);
+        return reservingPolice != null && 
+               !reservingPolice.equals(agentInfo.getID()) && 
+               !isReservationExpired(humanId);
+    }
+
+    // 新增：保留目标
+    private void reserveTarget(EntityID humanId) {
+        reservedTargets.put(humanId, agentInfo.getID());
+        reservationTimes.put(humanId, currentTime);
+    }
+
+    // 新增：释放目标保留
+    private void releaseReservedTarget(EntityID humanId) {
+        if (agentInfo.getID().equals(reservedTargets.get(humanId))) {
+            reservedTargets.remove(humanId);
+            reservationTimes.remove(humanId);
+        }
+    }
+
+    // 新增：检查保留是否过期
+    private boolean isReservationExpired(EntityID humanId) {
+        Integer reservationTime = reservationTimes.get(humanId);
+        if (reservationTime == null) return true;
+        return (currentTime - reservationTime) > RESERVATION_TIMEOUT;
+    }
+
+    // 新增：清理过期的目标保留
+    private void cleanupExpiredReservations() {
+        Iterator<Map.Entry<EntityID, Integer>> it = reservationTimes.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<EntityID, Integer> entry = it.next();
+            if (currentTime - entry.getValue() > RESERVATION_TIMEOUT) {
+                reservedTargets.remove(entry.getKey());
+                it.remove();
+            }
+        }
     }
 
     // 计算实际视野距离
@@ -152,13 +218,22 @@ public class SampleRoadDetector extends RoadDetector {
 
         if (!clusterTargets.isEmpty()) {
             clusterTargets.sort(new WeightedPrioritySorter(worldInfo, agentInfo.me()));
-            this.result = clusterTargets.get(0).getPosition();
-            this.currentTargetHuman = clusterTargets.get(0).getID();
-        } else {
-            // 聚类区域没有目标，选择最近的巡逻点
-            selectPatrolPoint();
-            currentTargetHuman = null; // 巡逻点不是伤员
+            
+            // 选择第一个未被其他警察保留的目标
+            for (Human human : clusterTargets) {
+                EntityID humanId = human.getID();
+                if (!isReservedByOtherPolice(humanId)) {
+                    reserveTarget(humanId);
+                    this.result = human.getPosition();
+                    this.currentTargetHuman = humanId;
+                    return;
+                }
+            }
         }
+        
+        // 聚类区域没有目标或所有目标都被保留，选择最近的巡逻点
+        selectPatrolPoint();
+        currentTargetHuman = null; // 巡逻点不是伤员
     }
     
     private void selectPatrolPoint() {
