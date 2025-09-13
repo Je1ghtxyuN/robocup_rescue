@@ -142,7 +142,7 @@ public class SampleRoadDetector extends RoadDetector {
 
     // 计算实际视野距离
     private int calculateViewDistance() {
-        return 30000; // 基础视野距离
+        return 100000; // 基础视野距离
     }
 
     // 获取视野内道路上的障碍物
