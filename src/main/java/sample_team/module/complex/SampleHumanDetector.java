@@ -9,22 +9,19 @@ import adf.core.agent.info.AgentInfo;
 import adf.core.agent.info.ScenarioInfo;
 import adf.core.agent.info.WorldInfo;
 import adf.core.agent.module.ModuleManager;
+import adf.core.component.communication.CommunicationMessage;
 import adf.core.component.module.algorithm.Clustering;
 import adf.core.component.module.complex.HumanDetector;
 import adf.core.debug.DefaultLogger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-// import java.util.Set;
-
+import java.util.Map;
+import java.util.Set;
 import org.apache.log4j.Logger;
-
-// import com.fasterxml.jackson.annotation.JsonFormat.Shape;
-
-// import rescuecore2.misc.geometry.Line2D;
-// import rescuecore2.standard.entities.*;
 import rescuecore2.standard.entities.Blockade;
 import rescuecore2.standard.entities.Building;
 import rescuecore2.standard.entities.Edge;
@@ -33,6 +30,8 @@ import rescuecore2.standard.entities.Road;
 import rescuecore2.standard.entities.StandardEntity;
 import rescuecore2.standard.entities.StandardEntityURN;
 import rescuecore2.worldmodel.EntityID;
+import sample_team.module.message.MessageSay;
+
 import java.awt.geom.Line2D;
 import java.awt.geom.Area;
 import java.awt.Shape;
@@ -42,6 +41,9 @@ public class SampleHumanDetector extends HumanDetector {
     private Clustering clustering;
     private EntityID result;
     private Logger logger;
+
+    private MessageManager messageManager; // 新增：用于发送消息
+    private Set<EntityID> reportedThisStep = new HashSet<>(); // 新增：记录当前时间步已报告的建筑物
 
     // 属性最大值常量
     private static final int MAX_HP = 10000;
@@ -53,6 +55,10 @@ public class SampleHumanDetector extends HumanDetector {
     private static final int MIN_DAMAGE_THRESHOLD = 50;  // 伤害低于此值认为无效
     private static final int MIN_BURIEDNESS_THRESHOLD = 30; // 掩埋程度高于此值认为无效
 
+    private Map<EntityID, EntityID> neededRescueCivilians = new HashMap<>(); // 警察发现的需要救援的平民
+    private Set<EntityID> blockedBuildings = new HashSet<>(); // 有障碍物的建筑
+    private Map<EntityID, Integer> fireAlerts = new HashMap<>(); // 火情警报
+
     public SampleHumanDetector(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager, DevelopData developData) {
         super(ai, wi, si, moduleManager, developData);
         logger = DefaultLogger.getLogger(agentInfo.me());
@@ -63,9 +69,74 @@ public class SampleHumanDetector extends HumanDetector {
 
     @Override
     public HumanDetector updateInfo(MessageManager messageManager) {
+        this.messageManager = messageManager; // 保存MessageManager
+        reportedThisStep.clear(); // 每步清除已报告集合
         logger.debug("Time:" + agentInfo.getTime());
         super.updateInfo(messageManager);
+
+        // 处理接收到的信息
+        List<CommunicationMessage> messages = messageManager.getReceivedMessageList();
+        for (CommunicationMessage message : messages) {
+            // 检查是否是AKSay消息
+            if (message instanceof MessageSay) {
+                MessageSay sayMessage = (MessageSay) message;
+                String text = sayMessage.getMessage();
+                
+                // 处理警察发送的NEED_RESCUE信息
+                if (text.startsWith("NEED_RESCUE:")) {
+                    try {
+                        String[] parts = text.split(":");
+                        int civilianIdValue = Integer.parseInt(parts[1]);
+                        int positionIdValue = Integer.parseInt(parts[2]);
+                        EntityID civilianID = new EntityID(civilianIdValue);
+                        EntityID positionID = new EntityID(positionIdValue);
+                        
+                        // 记录警察发现的需要救援的平民
+                        neededRescueCivilians.put(civilianID, positionID);
+                        logger.debug("Received NEED_RESCUE from police for civilian: " + civilianID);
+                    } catch (Exception e) {
+                        logger.error("Failed to parse NEED_RESCUE message: " + text, e);
+                    }
+                }
+
+                // 处理救护车发送的BLOCKADE信息
+                else if (text.startsWith("BLOCKADE:")) {
+                    try {
+                        int buildingIdValue = Integer.parseInt(text.substring(9));
+                        EntityID buildingID = new EntityID(buildingIdValue);
+                        
+                        // 记录有障碍物的建筑，避免前往
+                        blockedBuildings.add(buildingID);
+                        logger.debug("Received BLOCKADE alert for building: " + buildingID);
+                    } catch (NumberFormatException e) {
+                        logger.error("Failed to parse BLOCKADE message: " + text, e);
+                    }
+                }
+
+                // 消防队之间的协调信息
+                else if (text.startsWith("FIRE_ALERT:")) {
+                    try {
+                        String[] parts = text.split(":");
+                        int buildingIdValue = Integer.parseInt(parts[1]);
+                        int fireLevel = Integer.parseInt(parts[2]);
+                        EntityID buildingID = new EntityID(buildingIdValue);
+                        
+                        // 处理火情警报
+                        handleFireAlert(buildingID, fireLevel);
+                    } catch (Exception e) {
+                        logger.error("Failed to parse FIRE_ALERT message: " + text, e);
+                    }
+                }
+            }
+        }
+
         return this;
+    }
+
+    // 处理火情警报
+    private void handleFireAlert(EntityID buildingID, int fireLevel) {
+        fireAlerts.put(buildingID, fireLevel);
+        logger.debug("Received fire alert for building: " + buildingID + ", level: " + fireLevel);
     }
 
     @Override
@@ -113,12 +184,14 @@ public class SampleHumanDetector extends HumanDetector {
     private class WeightedPrioritySorter implements Comparator<StandardEntity> {
         private StandardEntity reference;
         private WorldInfo worldInfo;
+        private Map<EntityID, EntityID> neededRescueCivilians; // 警察报告的需救援平民
 
         // 权重配置 - 可以根据实际需求调整这些值
         private static final double DISTANCE_WEIGHT = 0.5;
         private static final double HP_WEIGHT = 0.2;
         private static final double BURIEDNESS_WEIGHT = 0.15;
         private static final double DAMAGE_WEIGHT = 0.15;
+        private static final double POLICE_REPORT_WEIGHT = 1.8;
 
         WeightedPrioritySorter(WorldInfo wi, StandardEntity reference) {
             this.reference = reference;
@@ -147,8 +220,12 @@ public class SampleHumanDetector extends HumanDetector {
             // 计算伤害分数（伤害越高分数越高）
             double damageScore = calculateDamageScore(human);
 
+             // 新增：检查是否是警察报告的需救援平民
+            double policeReportBonus = neededRescueCivilians.containsKey(human.getID()) ? 
+                                    POLICE_REPORT_WEIGHT : 0.0;
+
             // 综合加权分数
-            return (distanceScore * DISTANCE_WEIGHT) +
+            return  policeReportBonus + (distanceScore * DISTANCE_WEIGHT) +
                     (hpScore * HP_WEIGHT) +
                     (buriednessScore * BURIEDNESS_WEIGHT) +
                     (damageScore * DAMAGE_WEIGHT);
@@ -263,9 +340,15 @@ public class SampleHumanDetector extends HumanDetector {
 
 
        if (position instanceof Building && hasBlockedEntrance((Building) position)) {
+            // 新增：发送广播消息
+            if (!reportedThisStep.contains(position.getID())) {
+                sendBlockadeMessage(position.getID());
+                reportedThisStep.add(position.getID());
+            }
             logger.debug("Invalid due to blocked entrance: " + target);
             return false;
         }
+
         StandardEntityURN positionURN = position.getStandardURN();
         if (positionURN == REFUGE || positionURN == AMBULANCE_TEAM)
             return false;
@@ -273,7 +356,19 @@ public class SampleHumanDetector extends HumanDetector {
         return true;
     }
 
-        // 新增方法：检查建筑物入口是否被阻挡
+     // 新增方法：发送障碍物广播消息
+    private void sendBlockadeMessage(EntityID buildingID) {
+        try {
+            String message = "BLOCKADE:" + buildingID.getValue();
+            MessageSay sayMessage = new MessageSay(true, message);
+            messageManager.addMessage(sayMessage);
+            logger.debug("Sent blockade alert for building: " + buildingID);
+        } catch (Exception e) {
+            logger.error("Failed to send message", e);
+        }
+    }
+
+    // 检查建筑物入口是否被阻挡
     private boolean hasBlockedEntrance(Building building) {
         for (Edge edge : getEntranceEdges(building)) {
             EntityID roadID = edge.getNeighbour();

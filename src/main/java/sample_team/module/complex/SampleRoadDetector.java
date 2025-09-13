@@ -6,14 +6,17 @@ import adf.core.agent.info.AgentInfo;
 import adf.core.agent.info.ScenarioInfo;
 import adf.core.agent.info.WorldInfo;
 import adf.core.agent.module.ModuleManager;
+import adf.core.component.communication.CommunicationMessage;
 import adf.core.component.module.algorithm.Clustering;
 import adf.core.component.module.complex.RoadDetector;
-// 消防员
-// 救护队
-// 其他警察
+import adf.core.debug.DefaultLogger;
 import rescuecore2.standard.entities.*;
 import rescuecore2.worldmodel.EntityID;
 import rescuecore2.worldmodel.Entity;
+
+import sample_team.module.message.MessageSay;
+
+import org.apache.log4j.Logger;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -23,7 +26,7 @@ import java.awt.Shape;
 
 public class SampleRoadDetector extends RoadDetector {
 
-    // 新增字段：当前锁定的目标及锁定时间
+    // 当前锁定的目标及锁定时间
     private EntityID lockedTarget = null;
     private int lockStartTime = -1;
     private static final int LOCK_TIMEOUT = 20; // 锁定超时时间（秒）
@@ -35,6 +38,9 @@ public class SampleRoadDetector extends RoadDetector {
     private Map<EntityID, Integer> lastProcessedTime = new HashMap<>();
     private int currentTime;
     private Set<EntityID> visibleRoads = new HashSet<>();
+    private Set<EntityID> highPriorityBuildings = new HashSet<>(); // 新增：高优先级建筑物列表
+
+    private Logger logger;
  
     // 因子权重参数
     private static final double BASE_VISIBILITY_FACTOR = 1.5;//可见性
@@ -48,6 +54,7 @@ public class SampleRoadDetector extends RoadDetector {
     public SampleRoadDetector(AgentInfo ai, WorldInfo wi, ScenarioInfo si,
                             ModuleManager moduleManager, DevelopData developData) {
         super(ai, wi, si, moduleManager, developData);
+        logger = DefaultLogger.getLogger(agentInfo.me());
         this.clustering = moduleManager.getModule(
             "SampleRoadDetector.Clustering",
             "sample_team.module.algorithm.KMeansClustering");
@@ -70,6 +77,34 @@ public class SampleRoadDetector extends RoadDetector {
         }
         super.updateInfo(messageManager);
         this.currentTime = agentInfo.getTime();
+
+        // 处理接收到的消息
+        highPriorityBuildings.clear(); // 清空高优先级建筑物列表
+
+        List<CommunicationMessage> messages = messageManager.getReceivedMessageList();
+        for (CommunicationMessage message : messages) {
+            // 检查是否是MessageSay消息
+            if (message instanceof MessageSay) {
+                MessageSay sayMessage = (MessageSay) message;
+                String text = sayMessage.getMessage();
+                
+                if (text.startsWith("BLOCKADE:")) {
+                    try {
+                        int buildingIdValue = Integer.parseInt(text.substring(9));
+                        EntityID buildingID = new EntityID(buildingIdValue);
+                        highPriorityBuildings.add(buildingID);
+                    } catch (Exception e) {
+                        // 忽略解析错误
+                    }
+                }
+            }
+        }
+
+        logger.debug("[RoadDetector] Lock Status: " + 
+                     (this.lockedTarget != null ? "Locked on " + this.lockedTarget + 
+                      " since time " + this.lockStartTime : "No lock") + 
+                     ", HighPriorityBuildings: " + this.highPriorityBuildings.size());
+        
         
         return this;
     }
@@ -86,6 +121,8 @@ public class SampleRoadDetector extends RoadDetector {
 
     @Override
     public SampleRoadDetector calc() {
+        logger.debug("[RoadDetector] calc started at time " + this.agentInfo.getTime());
+
         // 优先处理已锁定的目标
         if (lockedTarget != null && !isTargetCleared(lockedTarget)) {
             this.result = lockedTarget;
@@ -115,28 +152,36 @@ public class SampleRoadDetector extends RoadDetector {
         
         // 4. 获取这些道路上的有效障碍物
         List<Blockade> validBlockades = getVisibleBlockades();
+        logger.debug("[RoadDetector] Found " + validBlockades.size() + " valid blockades in visible area");
         
         // 5. 按优先级排序并选择目标
         if (!validBlockades.isEmpty()) {
+            logger.debug("[RoadDetector] Prioritizing visible blockades");
             prioritizeAndSelectTarget(position, validBlockades);
         } 
+
         // 6. 没有可见障碍物时使用聚类方法
         else {
+            logger.debug("[RoadDetector] No visible blockades, using clustering method");
             detectUsingClustering();
         }
         
         // 7. 更新处理时间
         if (result != null) {
             lastProcessedTime.put(result, currentTime);
+            logger.info("[RoadDetector] Selected new target: " + this.result);
+        }else {
+            logger.warn("[RoadDetector] No target selected!");
         }
-        
+
         // 当选择新目标时进行锁定
         if (this.result != null) {
             lockedTarget = this.result;
             lockStartTime = agentInfo.getTime();
+            logger.debug("[RoadDetector] Locked on new target: " + this.lockedTarget);
         }
         
-        
+        logger.debug("[RoadDetector] calc completed");
         return this;
     }
 
@@ -202,7 +247,7 @@ public class SampleRoadDetector extends RoadDetector {
         // 主干道因子: 如果障碍物在主干道上，优先级更高
         double mainRoadFactor = isOnMainRoad(blockade) ? BASE_MAIN_ROAD_FACTOR : 1.0;
 
-       // 新增协调因子：已被其他警察锁定的目标降级
+       // 协调因子：已被其他警察锁定的目标降级
         double coordinationFactor = 1.0;
         EntityID roadID = blockade.getPosition();
         if (globalTargetLocks.containsKey(roadID) && 
@@ -213,11 +258,32 @@ public class SampleRoadDetector extends RoadDetector {
         // 紧急因子
         double emergencyServiceFactor = calculateEmergencyServiceFactor(blockade.getPosition());
 
+        // 新增：高优先级建筑物因子
+        double buildingAlertFactor = isBlockingHighPriorityBuilding(blockade) ? 5.0 : 1.0;
+
+
         return visibilityFactor * entranceFactor * refugeFactor * 
-           mainRoadFactor * coordinationFactor * emergencyServiceFactor;
+           mainRoadFactor * coordinationFactor * emergencyServiceFactor * buildingAlertFactor;
            
     }
     
+     // 新增方法：检查障碍物是否阻挡高优先级建筑物
+    private boolean isBlockingHighPriorityBuilding(Blockade blockade) {
+        if (highPriorityBuildings.isEmpty()) return false;
+        EntityID roadID = blockade.getPosition();
+        StandardEntity entity = worldInfo.getEntity(roadID);
+        if (!(entity instanceof Road)) return false;
+        Road road = (Road) entity;
+        for (Edge edge : road.getEdges()) {
+            if (edge.isPassable()) {
+                EntityID neighbourID = edge.getNeighbour();
+                if (neighbourID != null && highPriorityBuildings.contains(neighbourID)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
     
 
    
@@ -534,19 +600,6 @@ public class SampleRoadDetector extends RoadDetector {
         return positions;
     }
 
-    // 获取其他警察位置（排除自己）
-    private Map<EntityID, EntityID> getOtherPolicePositions() {
-        Map<EntityID, EntityID> positions = new HashMap<>();
-        for (StandardEntity entity : worldInfo.getEntitiesOfType(StandardEntityURN.POLICE_FORCE)) {
-            PoliceForce pf = (PoliceForce) entity;
-            // 排除自己
-            if (!pf.getID().equals(agentInfo.getID()) && pf.isPositionDefined()) {
-                positions.put(pf.getID(), pf.getPosition());
-            }
-        }
-        return positions;
-    }
-
 
     // 计算紧急服务权重因子
     private double calculateEmergencyServiceFactor(EntityID blockadePosition) {
@@ -576,32 +629,5 @@ public class SampleRoadDetector extends RoadDetector {
     
     return emergencyFactor;
     }
-
-    // 获取与紧急服务相关的障碍物
-    private List<Blockade> getEmergencyServiceBlockades(List<Blockade> allBlockades) {
-        List<Blockade> emergencyBlockades = new ArrayList<>();
-        
-        // 获取所有紧急服务位置
-        Map<EntityID, EntityID> firePositions = getFireBrigadePositions();
-        Map<EntityID, EntityID> ambulancePositions = getAmbulancePositions();
-        
-        // 合并所有紧急服务位置
-        Set<EntityID> allEmergencyPositions = new HashSet<>();
-        allEmergencyPositions.addAll(firePositions.values());
-        allEmergencyPositions.addAll(ambulancePositions.values());
-        
-        // 查找这些位置附近的障碍物
-        for (EntityID emergencyPos : allEmergencyPositions) {
-            for (Blockade blockade : allBlockades) {
-                int distance = worldInfo.getDistance(emergencyPos, blockade.getPosition());
-                if (distance >= 0 && distance <= EMERGENCY_SERVICE_RANGE) {
-                    emergencyBlockades.add(blockade);
-                }
-            }
-        }
-        
-        return emergencyBlockades;
-    }
-
 
 }
