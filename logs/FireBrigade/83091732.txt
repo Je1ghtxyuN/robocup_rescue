@@ -1,0 +1,433 @@
+2025-09-13 13:04:10,734 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:1
+2025-09-13 13:04:10,734 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 1, Position: 7188, Searched buildings: 0, Unsearched buildings: 0, Patrol targets: 0, Recoverable targets: 0
+2025-09-13 13:04:10,734 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Potential targets count: 0
+2025-09-13 13:04:10,734 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] calc started at time 1, Current target: null
+2025-09-13 13:04:10,734 [DEBUG|FireBrigade/83091732|SampleSearch] unsearchedBuildingIDs: [33425, 33266, 11876, 33338]
+2025-09-13 13:04:10,735 [DEBUG|FireBrigade/83091732|SampleSearch] best path is: [7188, 4965, 3012, 7575, 352, 4155, 33357, 4956, 7080, 2526, 11892, 11876]
+2025-09-13 13:04:10,735 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Path planning result: 12 steps
+2025-09-13 13:04:10,735 [DEBUG|FireBrigade/83091732|SampleSearch] chose: 2526
+2025-09-13 13:04:10,735 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Final target selected: 2526
+2025-09-13 13:04:16,601 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:2
+2025-09-13 13:04:16,601 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 2, Position: 7188, Searched buildings: 0, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 0
+2025-09-13 13:04:16,601 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Potential targets count: 0
+2025-09-13 13:04:16,601 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] calc started at time 2, Current target: null
+2025-09-13 13:04:16,601 [DEBUG|FireBrigade/83091732|SampleSearch] unsearchedBuildingIDs: [33425, 33266, 11876, 33338]
+2025-09-13 13:04:16,602 [DEBUG|FireBrigade/83091732|SampleSearch] best path is: [7188, 4965, 3012, 7575, 352, 4155, 33357, 4956, 7080, 2526, 11892, 11876]
+2025-09-13 13:04:16,602 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Path planning result: 12 steps
+2025-09-13 13:04:16,602 [DEBUG|FireBrigade/83091732|SampleSearch] Detected blockade at: 4965
+2025-09-13 13:04:16,602 [DEBUG|FireBrigade/83091732|SampleSearch] Temporarily removed target: 11876
+2025-09-13 13:04:16,602 [DEBUG|FireBrigade/83091732|SampleSearch] Replanned path: [7188, 4965, 3012, 7575, 352, 4155, 33357, 4956, 33169, 33179, 33190, 33191, 33276, 33266]
+2025-09-13 13:04:16,602 [DEBUG|FireBrigade/83091732|SampleSearch] chose: 33191
+2025-09-13 13:04:16,602 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Final target selected: 33191
+2025-09-13 13:04:21,245 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:3
+2025-09-13 13:04:21,245 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 3, Position: 7188, Searched buildings: 6, Unsearched buildings: 3, Patrol targets: 0, Recoverable targets: 1
+2025-09-13 13:04:21,245 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Potential targets count: 0
+2025-09-13 13:04:21,245 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] calc started at time 3, Current target: null
+2025-09-13 13:04:21,246 [DEBUG|FireBrigade/83091732|SampleSearch] unsearchedBuildingIDs: [33425, 33266, 33338]
+2025-09-13 13:04:21,246 [DEBUG|FireBrigade/83091732|SampleSearch] best path is: [7188, 4965, 3012, 7575, 352, 4155, 33357, 4956, 33169, 33179, 33190, 33191, 33276, 33266]
+2025-09-13 13:04:21,246 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Path planning result: 14 steps
+2025-09-13 13:04:21,246 [DEBUG|FireBrigade/83091732|SampleSearch] Detected blockade at: 4965
+2025-09-13 13:04:21,246 [DEBUG|FireBrigade/83091732|SampleSearch] Temporarily removed target: 33266
+2025-09-13 13:04:21,246 [DEBUG|FireBrigade/83091732|SampleSearch] Replanned path: [7188, 4965, 3012, 7575, 352, 4155, 33357, 4956, 33169, 33179, 33190, 33191, 33234, 33282, 33431, 33447, 33425]
+2025-09-13 13:04:21,246 [DEBUG|FireBrigade/83091732|SampleSearch] chose: 33431
+2025-09-13 13:04:21,246 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Final target selected: 33431
+2025-09-13 13:04:26,963 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:4
+2025-09-13 13:04:26,964 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 4, Position: 4155, Searched buildings: 6, Unsearched buildings: 2, Patrol targets: 0, Recoverable targets: 2
+2025-09-13 13:04:26,964 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Potential targets count: 0
+2025-09-13 13:04:26,964 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] calc started at time 4, Current target: null
+2025-09-13 13:04:26,964 [DEBUG|FireBrigade/83091732|SampleSearch] unsearchedBuildingIDs: [33425, 33338]
+2025-09-13 13:04:26,964 [DEBUG|FireBrigade/83091732|SampleSearch] best path is: [4155, 33357, 4956, 33169, 33179, 33190, 33191, 33234, 33282, 33431, 33447, 33425]
+2025-09-13 13:04:26,964 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Path planning result: 12 steps
+2025-09-13 13:04:26,964 [DEBUG|FireBrigade/83091732|SampleSearch] Detected blockade at: 4956
+2025-09-13 13:04:26,964 [DEBUG|FireBrigade/83091732|SampleSearch] Temporarily removed target: 33425
+2025-09-13 13:04:26,964 [DEBUG|FireBrigade/83091732|SampleSearch] Replanned path: [4155, 33357, 4956, 33169, 33179, 33190, 33191, 33234, 33282, 33354, 33338]
+2025-09-13 13:04:26,964 [DEBUG|FireBrigade/83091732|SampleSearch] chose: 33282
+2025-09-13 13:04:26,964 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Final target selected: 33282
+2025-09-13 13:04:33,597 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:5
+2025-09-13 13:04:33,597 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 5, Position: 4956, Searched buildings: 10, Unsearched buildings: 1, Patrol targets: 0, Recoverable targets: 3
+2025-09-13 13:04:33,597 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Potential targets count: 0
+2025-09-13 13:04:33,597 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] calc started at time 5, Current target: null
+2025-09-13 13:04:33,597 [DEBUG|FireBrigade/83091732|SampleSearch] unsearchedBuildingIDs: [33338]
+2025-09-13 13:04:33,597 [DEBUG|FireBrigade/83091732|SampleSearch] best path is: [4956, 33169, 33179, 33190, 33191, 33234, 33282, 33354, 33338]
+2025-09-13 13:04:33,597 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Path planning result: 9 steps
+2025-09-13 13:04:33,597 [DEBUG|FireBrigade/83091732|SampleSearch] Detected blockade at: 33169
+2025-09-13 13:04:33,597 [DEBUG|FireBrigade/83091732|SampleSearch] Temporarily removed target: 33338
+2025-09-13 13:04:33,597 [DEBUG|FireBrigade/83091732|SampleSearch] chose: null
+2025-09-13 13:04:33,597 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Final target selected: null
+2025-09-13 13:04:40,540 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:6
+2025-09-13 13:04:40,540 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 6, Position: 4956, Searched buildings: 15, Unsearched buildings: 0, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:04:40,540 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Potential targets count: 0
+2025-09-13 13:04:40,540 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] calc started at time 6, Current target: null
+2025-09-13 13:04:40,540 [DEBUG|FireBrigade/83091732|SampleSearch] unsearchedBuildingIDs: [33425, 33266, 33338]
+2025-09-13 13:04:40,540 [DEBUG|FireBrigade/83091732|SampleSearch] best path is: [4956, 33169, 33179, 33190, 33191, 33276, 33266]
+2025-09-13 13:04:40,540 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Path planning result: 7 steps
+2025-09-13 13:04:40,540 [DEBUG|FireBrigade/83091732|SampleSearch] Detected blockade at: 33169
+2025-09-13 13:04:40,540 [DEBUG|FireBrigade/83091732|SampleSearch] Temporarily removed target: 33266
+2025-09-13 13:04:40,540 [DEBUG|FireBrigade/83091732|SampleSearch] Replanned path: [4956, 33169, 33179, 33190, 33191, 33234, 33282, 33431, 33447, 33425]
+2025-09-13 13:04:40,540 [DEBUG|FireBrigade/83091732|SampleSearch] chose: 33431
+2025-09-13 13:04:40,540 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Final target selected: 33431
+2025-09-13 13:04:47,329 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:7
+2025-09-13 13:04:47,329 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 7, Position: 4956, Searched buildings: 0, Unsearched buildings: 2, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:04:47,329 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Potential targets count: 0
+2025-09-13 13:04:47,329 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] calc started at time 7, Current target: null
+2025-09-13 13:04:47,329 [DEBUG|FireBrigade/83091732|SampleSearch] unsearchedBuildingIDs: [33425, 33338]
+2025-09-13 13:04:47,329 [DEBUG|FireBrigade/83091732|SampleSearch] best path is: [4956, 33169, 33179, 33190, 33191, 33234, 33282, 33431, 33447, 33425]
+2025-09-13 13:04:47,329 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Path planning result: 10 steps
+2025-09-13 13:04:47,329 [DEBUG|FireBrigade/83091732|SampleSearch] Detected blockade at: 33169
+2025-09-13 13:04:47,329 [DEBUG|FireBrigade/83091732|SampleSearch] Temporarily removed target: 33425
+2025-09-13 13:04:47,329 [DEBUG|FireBrigade/83091732|SampleSearch] Replanned path: [4956, 33169, 33179, 33190, 33191, 33234, 33282, 33354, 33338]
+2025-09-13 13:04:47,329 [DEBUG|FireBrigade/83091732|SampleSearch] chose: 33282
+2025-09-13 13:04:47,329 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Final target selected: 33282
+2025-09-13 13:04:53,914 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:8
+2025-09-13 13:04:53,914 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 8, Position: 4956, Searched buildings: 6, Unsearched buildings: 1, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:04:53,914 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Potential targets count: 0
+2025-09-13 13:04:53,914 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] calc started at time 8, Current target: null
+2025-09-13 13:04:53,914 [DEBUG|FireBrigade/83091732|SampleSearch] unsearchedBuildingIDs: [33338]
+2025-09-13 13:04:53,914 [DEBUG|FireBrigade/83091732|SampleSearch] best path is: [4956, 33169, 33179, 33190, 33191, 33234, 33282, 33354, 33338]
+2025-09-13 13:04:53,914 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Path planning result: 9 steps
+2025-09-13 13:04:53,914 [DEBUG|FireBrigade/83091732|SampleSearch] Detected blockade at: 33169
+2025-09-13 13:04:53,914 [DEBUG|FireBrigade/83091732|SampleSearch] Temporarily removed target: 33338
+2025-09-13 13:04:53,914 [DEBUG|FireBrigade/83091732|SampleSearch] chose: null
+2025-09-13 13:04:53,914 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Final target selected: null
+2025-09-13 13:05:00,658 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:9
+2025-09-13 13:05:00,658 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 9, Position: 4956, Searched buildings: 6, Unsearched buildings: 0, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:05:00,658 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Potential targets count: 0
+2025-09-13 13:05:00,658 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] calc started at time 9, Current target: null
+2025-09-13 13:05:00,658 [DEBUG|FireBrigade/83091732|SampleSearch] unsearchedBuildingIDs: [33425, 33266, 33338]
+2025-09-13 13:05:00,659 [DEBUG|FireBrigade/83091732|SampleSearch] best path is: [4956, 33169, 33179, 33190, 33191, 33276, 33266]
+2025-09-13 13:05:00,659 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Path planning result: 7 steps
+2025-09-13 13:05:00,659 [DEBUG|FireBrigade/83091732|SampleSearch] Detected blockade at: 33169
+2025-09-13 13:05:00,659 [DEBUG|FireBrigade/83091732|SampleSearch] Temporarily removed target: 33266
+2025-09-13 13:05:00,659 [DEBUG|FireBrigade/83091732|SampleSearch] Replanned path: [4956, 33169, 33179, 33190, 33191, 33234, 33282, 33431, 33447, 33425]
+2025-09-13 13:05:00,659 [DEBUG|FireBrigade/83091732|SampleSearch] chose: 33431
+2025-09-13 13:05:00,659 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Final target selected: 33431
+2025-09-13 13:05:07,985 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:10
+2025-09-13 13:05:07,986 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 10, Position: 4956, Searched buildings: 0, Unsearched buildings: 2, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:05:07,986 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Potential targets count: 0
+2025-09-13 13:05:07,986 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] calc started at time 10, Current target: null
+2025-09-13 13:05:07,986 [DEBUG|FireBrigade/83091732|SampleSearch] unsearchedBuildingIDs: [33425, 33338]
+2025-09-13 13:05:07,986 [DEBUG|FireBrigade/83091732|SampleSearch] best path is: [4956, 33169, 33179, 33190, 33191, 33234, 33282, 33431, 33447, 33425]
+2025-09-13 13:05:07,986 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Path planning result: 10 steps
+2025-09-13 13:05:07,986 [DEBUG|FireBrigade/83091732|SampleSearch] Detected blockade at: 33169
+2025-09-13 13:05:07,986 [DEBUG|FireBrigade/83091732|SampleSearch] Temporarily removed target: 33425
+2025-09-13 13:05:07,986 [DEBUG|FireBrigade/83091732|SampleSearch] Replanned path: [4956, 33169, 33179, 33190, 33191, 33234, 33282, 33354, 33338]
+2025-09-13 13:05:07,986 [DEBUG|FireBrigade/83091732|SampleSearch] chose: 33282
+2025-09-13 13:05:07,986 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Final target selected: 33282
+2025-09-13 13:05:14,099 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:11
+2025-09-13 13:05:14,099 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 11, Position: 4956, Searched buildings: 6, Unsearched buildings: 1, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:05:14,099 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Potential targets count: 0
+2025-09-13 13:05:14,099 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] calc started at time 11, Current target: null
+2025-09-13 13:05:14,099 [DEBUG|FireBrigade/83091732|SampleSearch] unsearchedBuildingIDs: [33338]
+2025-09-13 13:05:14,099 [DEBUG|FireBrigade/83091732|SampleSearch] best path is: [4956, 33169, 33179, 33190, 33191, 33234, 33282, 33354, 33338]
+2025-09-13 13:05:14,099 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Path planning result: 9 steps
+2025-09-13 13:05:14,099 [DEBUG|FireBrigade/83091732|SampleSearch] Detected blockade at: 33169
+2025-09-13 13:05:14,099 [DEBUG|FireBrigade/83091732|SampleSearch] Temporarily removed target: 33338
+2025-09-13 13:05:14,099 [DEBUG|FireBrigade/83091732|SampleSearch] chose: null
+2025-09-13 13:05:14,099 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Final target selected: null
+2025-09-13 13:05:20,718 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:12
+2025-09-13 13:05:20,718 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 12, Position: 4956, Searched buildings: 6, Unsearched buildings: 0, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:05:20,718 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Potential targets count: 0
+2025-09-13 13:05:20,718 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] calc started at time 12, Current target: null
+2025-09-13 13:05:20,718 [DEBUG|FireBrigade/83091732|SampleSearch] unsearchedBuildingIDs: [33425, 33266, 33338]
+2025-09-13 13:05:20,718 [DEBUG|FireBrigade/83091732|SampleSearch] best path is: [4956, 33169, 33179, 33190, 33191, 33276, 33266]
+2025-09-13 13:05:20,718 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Path planning result: 7 steps
+2025-09-13 13:05:20,718 [DEBUG|FireBrigade/83091732|SampleSearch] Detected blockade at: 33169
+2025-09-13 13:05:20,718 [DEBUG|FireBrigade/83091732|SampleSearch] Temporarily removed target: 33266
+2025-09-13 13:05:20,719 [DEBUG|FireBrigade/83091732|SampleSearch] Replanned path: [4956, 33169, 33179, 33190, 33191, 33234, 33282, 33431, 33447, 33425]
+2025-09-13 13:05:20,719 [DEBUG|FireBrigade/83091732|SampleSearch] chose: 33431
+2025-09-13 13:05:20,719 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Final target selected: 33431
+2025-09-13 13:05:27,400 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:13
+2025-09-13 13:05:27,400 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 13, Position: 33169, Searched buildings: 0, Unsearched buildings: 2, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:05:27,400 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Potential targets count: 0
+2025-09-13 13:05:27,400 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] calc started at time 13, Current target: null
+2025-09-13 13:05:27,400 [DEBUG|FireBrigade/83091732|SampleSearch] unsearchedBuildingIDs: [33425, 33338]
+2025-09-13 13:05:27,400 [DEBUG|FireBrigade/83091732|SampleSearch] best path is: [33169, 33179, 33190, 33191, 33234, 33282, 33431, 33447, 33425]
+2025-09-13 13:05:27,400 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Path planning result: 9 steps
+2025-09-13 13:05:27,400 [DEBUG|FireBrigade/83091732|SampleSearch] Detected blockade at: 33179
+2025-09-13 13:05:27,400 [DEBUG|FireBrigade/83091732|SampleSearch] Temporarily removed target: 33425
+2025-09-13 13:05:27,400 [DEBUG|FireBrigade/83091732|SampleSearch] Replanned path: [33169, 33179, 33190, 33191, 33234, 33282, 33354, 33338]
+2025-09-13 13:05:27,401 [DEBUG|FireBrigade/83091732|SampleSearch] chose: 33282
+2025-09-13 13:05:27,401 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Final target selected: 33282
+2025-09-13 13:05:35,175 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:14
+2025-09-13 13:05:35,175 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 14, Position: 33169, Searched buildings: 3, Unsearched buildings: 1, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:05:35,175 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Potential targets count: 0
+2025-09-13 13:05:35,175 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] calc started at time 14, Current target: null
+2025-09-13 13:05:35,175 [DEBUG|FireBrigade/83091732|SampleSearch] unsearchedBuildingIDs: [33338]
+2025-09-13 13:05:35,175 [DEBUG|FireBrigade/83091732|SampleSearch] best path is: [33169, 33179, 33190, 33191, 33234, 33282, 33354, 33338]
+2025-09-13 13:05:35,175 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Path planning result: 8 steps
+2025-09-13 13:05:35,175 [DEBUG|FireBrigade/83091732|SampleSearch] Detected blockade at: 33179
+2025-09-13 13:05:35,175 [DEBUG|FireBrigade/83091732|SampleSearch] Temporarily removed target: 33338
+2025-09-13 13:05:35,175 [DEBUG|FireBrigade/83091732|SampleSearch] chose: null
+2025-09-13 13:05:35,175 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Final target selected: null
+2025-09-13 13:05:41,375 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:15
+2025-09-13 13:05:41,375 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 15, Position: 33169, Searched buildings: 3, Unsearched buildings: 0, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:05:41,375 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Potential targets count: 0
+2025-09-13 13:05:41,375 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] calc started at time 15, Current target: null
+2025-09-13 13:05:41,375 [DEBUG|FireBrigade/83091732|SampleSearch] unsearchedBuildingIDs: [33425, 33266, 11876, 33338]
+2025-09-13 13:05:41,375 [DEBUG|FireBrigade/83091732|SampleSearch] best path is: [33169, 33179, 33190, 33191, 33276, 33266]
+2025-09-13 13:05:41,376 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Path planning result: 6 steps
+2025-09-13 13:05:41,376 [DEBUG|FireBrigade/83091732|SampleSearch] Detected blockade at: 33179
+2025-09-13 13:05:41,376 [DEBUG|FireBrigade/83091732|SampleSearch] Temporarily removed target: 33266
+2025-09-13 13:05:41,376 [DEBUG|FireBrigade/83091732|SampleSearch] Replanned path: [33169, 33179, 33190, 33191, 33234, 33282, 33431, 33447, 33425]
+2025-09-13 13:05:41,376 [DEBUG|FireBrigade/83091732|SampleSearch] chose: 33431
+2025-09-13 13:05:41,376 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Final target selected: 33431
+2025-09-13 13:05:47,445 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:16
+2025-09-13 13:05:47,445 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 16, Position: 33169, Searched buildings: 0, Unsearched buildings: 3, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:05:47,445 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Potential targets count: 0
+2025-09-13 13:05:47,445 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] calc started at time 16, Current target: null
+2025-09-13 13:05:47,445 [DEBUG|FireBrigade/83091732|SampleSearch] unsearchedBuildingIDs: [33425, 11876, 33338]
+2025-09-13 13:05:47,446 [DEBUG|FireBrigade/83091732|SampleSearch] best path is: [33169, 33179, 33190, 33191, 33234, 33282, 33431, 33447, 33425]
+2025-09-13 13:05:47,446 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Path planning result: 9 steps
+2025-09-13 13:05:47,446 [DEBUG|FireBrigade/83091732|SampleSearch] Detected blockade at: 33179
+2025-09-13 13:05:47,446 [DEBUG|FireBrigade/83091732|SampleSearch] Temporarily removed target: 33425
+2025-09-13 13:05:47,446 [DEBUG|FireBrigade/83091732|SampleSearch] Replanned path: [33169, 4956, 7080, 2526, 11892, 11876]
+2025-09-13 13:05:47,446 [DEBUG|FireBrigade/83091732|SampleSearch] chose: 2526
+2025-09-13 13:05:47,446 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Final target selected: 2526
+2025-09-13 13:05:53,595 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:17
+2025-09-13 13:05:53,595 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 17, Position: 2526, Searched buildings: 3, Unsearched buildings: 2, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:05:53,595 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Potential targets count: 0
+2025-09-13 13:05:53,595 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] calc started at time 17, Current target: null
+2025-09-13 13:05:53,595 [DEBUG|FireBrigade/83091732|SampleSearch] unsearchedBuildingIDs: [33338]
+2025-09-13 13:05:53,595 [DEBUG|FireBrigade/83091732|SampleSearch] best path is: [2526, 7080, 4956, 33169, 33179, 33190, 33191, 33234, 33282, 33354, 33338]
+2025-09-13 13:05:53,595 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Path planning result: 11 steps
+2025-09-13 13:05:53,595 [DEBUG|FireBrigade/83091732|SampleSearch] Detected blockade at: 7080
+2025-09-13 13:05:53,595 [DEBUG|FireBrigade/83091732|SampleSearch] Temporarily removed target: 33338
+2025-09-13 13:05:53,595 [DEBUG|FireBrigade/83091732|SampleSearch] chose: null
+2025-09-13 13:05:53,595 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Final target selected: null
+2025-09-13 13:05:59,910 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:18
+2025-09-13 13:05:59,910 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 18, Position: 2526, Searched buildings: 9, Unsearched buildings: 0, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:05:59,910 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Potential targets count: 0
+2025-09-13 13:05:59,910 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] calc started at time 18, Current target: null
+2025-09-13 13:05:59,910 [DEBUG|FireBrigade/83091732|SampleSearch] unsearchedBuildingIDs: [33425, 33338]
+2025-09-13 13:05:59,910 [DEBUG|FireBrigade/83091732|SampleSearch] best path is: [2526, 7080, 4956, 33169, 33179, 33190, 33191, 33234, 33282, 33431, 33447, 33425]
+2025-09-13 13:05:59,910 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Path planning result: 12 steps
+2025-09-13 13:05:59,910 [DEBUG|FireBrigade/83091732|SampleSearch] Detected blockade at: 7080
+2025-09-13 13:05:59,910 [DEBUG|FireBrigade/83091732|SampleSearch] Temporarily removed target: 33425
+2025-09-13 13:05:59,910 [DEBUG|FireBrigade/83091732|SampleSearch] Replanned path: [2526, 7080, 4956, 33169, 33179, 33190, 33191, 33234, 33282, 33354, 33338]
+2025-09-13 13:05:59,910 [DEBUG|FireBrigade/83091732|SampleSearch] chose: 33282
+2025-09-13 13:05:59,910 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Final target selected: 33282
+2025-09-13 13:06:05,930 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:19
+2025-09-13 13:06:05,930 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 19, Position: 33169, Searched buildings: 0, Unsearched buildings: 1, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:06:05,931 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Potential targets count: 0
+2025-09-13 13:06:05,931 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] calc started at time 19, Current target: null
+2025-09-13 13:06:05,931 [DEBUG|FireBrigade/83091732|SampleSearch] unsearchedBuildingIDs: [33338]
+2025-09-13 13:06:05,931 [DEBUG|FireBrigade/83091732|SampleSearch] best path is: [33169, 33179, 33190, 33191, 33234, 33282, 33354, 33338]
+2025-09-13 13:06:05,931 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Path planning result: 8 steps
+2025-09-13 13:06:05,931 [DEBUG|FireBrigade/83091732|SampleSearch] Detected blockade at: 33179
+2025-09-13 13:06:05,931 [DEBUG|FireBrigade/83091732|SampleSearch] Temporarily removed target: 33338
+2025-09-13 13:06:05,931 [DEBUG|FireBrigade/83091732|SampleSearch] chose: null
+2025-09-13 13:06:05,931 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Final target selected: null
+2025-09-13 13:06:11,781 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:20
+2025-09-13 13:06:11,782 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 20, Position: 33169, Searched buildings: 3, Unsearched buildings: 0, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:06:11,782 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Potential targets count: 1
+2025-09-13 13:06:11,782 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Selected target: Civilian (519054459) with ID: 519054459
+2025-09-13 13:06:18,051 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:21
+2025-09-13 13:06:18,051 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 21, Position: 4155, Searched buildings: 0, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:06:24,167 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:22
+2025-09-13 13:06:24,167 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 22, Position: 3363, Searched buildings: 4, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:06:30,267 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:23
+2025-09-13 13:06:30,267 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 23, Position: 7611, Searched buildings: 9, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:06:36,087 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:24
+2025-09-13 13:06:36,087 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 24, Position: 14707, Searched buildings: 14, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:06:42,016 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:25
+2025-09-13 13:06:42,016 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 25, Position: 14707, Searched buildings: 18, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:06:47,842 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:26
+2025-09-13 13:06:47,842 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 26, Position: 14707, Searched buildings: 18, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:06:53,617 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:27
+2025-09-13 13:06:53,617 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 27, Position: 14707, Searched buildings: 18, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:06:59,585 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:28
+2025-09-13 13:06:59,585 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 28, Position: 14707, Searched buildings: 18, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:07:05,857 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:29
+2025-09-13 13:07:05,857 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 29, Position: 14707, Searched buildings: 18, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:07:11,630 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:30
+2025-09-13 13:07:11,630 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 30, Position: 14707, Searched buildings: 18, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:07:18,258 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:31
+2025-09-13 13:07:18,258 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 31, Position: 36012, Searched buildings: 18, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:07:23,935 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:32
+2025-09-13 13:07:23,936 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 32, Position: 36012, Searched buildings: 19, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:07:29,783 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:33
+2025-09-13 13:07:29,783 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 33, Position: 36012, Searched buildings: 19, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:07:35,622 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:34
+2025-09-13 13:07:35,622 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 34, Position: 36012, Searched buildings: 19, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:07:41,671 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:35
+2025-09-13 13:07:41,671 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 35, Position: 36012, Searched buildings: 19, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:07:48,973 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:36
+2025-09-13 13:07:48,973 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 36, Position: 36012, Searched buildings: 19, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:07:55,940 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:37
+2025-09-13 13:07:55,940 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 37, Position: 36012, Searched buildings: 19, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:08:02,036 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:38
+2025-09-13 13:08:02,036 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 38, Position: 36012, Searched buildings: 19, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:08:02,036 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Invalid due to low buriedness: Civilian (519054459)
+2025-09-13 13:08:02,036 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Invalid Human:Civilian (519054459) ==>reset target
+2025-09-13 13:08:02,036 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Sent blockade alert for building: 28754
+2025-09-13 13:08:02,036 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Invalid due to blocked entrance: Civilian (1338076808)
+2025-09-13 13:08:02,036 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Invalid due to low buriedness: Civilian (519054459)
+2025-09-13 13:08:02,036 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Potential targets count: 0
+2025-09-13 13:08:02,036 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] calc started at time 38, Current target: null
+2025-09-13 13:08:02,036 [DEBUG|FireBrigade/83091732|SampleSearch] unsearchedBuildingIDs: [33425, 33266, 11876, 33338]
+2025-09-13 13:08:02,037 [DEBUG|FireBrigade/83091732|SampleSearch] best path is: [36012, 36011, 14707, 2535, 1976, 4101, 8745, 7611, 5478, 37, 3831, 299, 9429, 6801, 1839, 8061, 2517, 1899, 7197, 3363, 317, 8916, 7188, 4965, 3012, 7575, 352, 4155, 33357, 4956, 7080, 2526, 11892, 11876]
+2025-09-13 13:08:02,037 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Path planning result: 34 steps
+2025-09-13 13:08:02,037 [DEBUG|FireBrigade/83091732|SampleSearch] Detected blockade at: 5478
+2025-09-13 13:08:02,037 [DEBUG|FireBrigade/83091732|SampleSearch] Temporarily removed target: 11876
+2025-09-13 13:08:02,037 [DEBUG|FireBrigade/83091732|SampleSearch] Replanned path: [36012, 36011, 14707, 2535, 1976, 4101, 8745, 7611, 5478, 37, 3831, 299, 9429, 6801, 1839, 8061, 2517, 1899, 7197, 3363, 317, 8916, 7188, 4965, 3012, 7575, 352, 4155, 33357, 4956, 33169, 33179, 33190, 33191, 33276, 33266]
+2025-09-13 13:08:02,037 [DEBUG|FireBrigade/83091732|SampleSearch] chose: 33191
+2025-09-13 13:08:02,037 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Final target selected: 33191
+2025-09-13 13:08:08,002 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:39
+2025-09-13 13:08:08,003 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 39, Position: 14707, Searched buildings: 19, Unsearched buildings: 3, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:08:08,003 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Sent blockade alert for building: 28754
+2025-09-13 13:08:08,003 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Invalid due to blocked entrance: Civilian (1338076808)
+2025-09-13 13:08:08,003 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Invalid due to low buriedness: Civilian (519054459)
+2025-09-13 13:08:08,003 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Potential targets count: 0
+2025-09-13 13:08:08,003 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] calc started at time 39, Current target: null
+2025-09-13 13:08:08,003 [DEBUG|FireBrigade/83091732|SampleSearch] unsearchedBuildingIDs: [33425, 33266, 33338]
+2025-09-13 13:08:08,003 [DEBUG|FireBrigade/83091732|SampleSearch] best path is: [14707, 2535, 1976, 4101, 8745, 7611, 5478, 37, 3831, 299, 9429, 6801, 1839, 8061, 2517, 1899, 7197, 3363, 317, 8916, 7188, 4965, 3012, 7575, 352, 4155, 33357, 4956, 33169, 33179, 33190, 33191, 33276, 33266]
+2025-09-13 13:08:08,003 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Path planning result: 34 steps
+2025-09-13 13:08:08,003 [DEBUG|FireBrigade/83091732|SampleSearch] Detected blockade at: 5478
+2025-09-13 13:08:08,003 [DEBUG|FireBrigade/83091732|SampleSearch] Temporarily removed target: 33266
+2025-09-13 13:08:08,004 [DEBUG|FireBrigade/83091732|SampleSearch] Replanned path: [14707, 2535, 1976, 4101, 8745, 7611, 5478, 37, 3831, 299, 9429, 6801, 1839, 8061, 2517, 1899, 7197, 3363, 317, 8916, 7188, 4965, 3012, 7575, 352, 4155, 33357, 4956, 33169, 33179, 33190, 33191, 33234, 33282, 33431, 33447, 33425]
+2025-09-13 13:08:08,004 [DEBUG|FireBrigade/83091732|SampleSearch] chose: 33431
+2025-09-13 13:08:08,004 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Final target selected: 33431
+2025-09-13 13:08:14,231 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:40
+2025-09-13 13:08:14,232 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 40, Position: 3831, Searched buildings: 19, Unsearched buildings: 2, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:08:14,232 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Sent blockade alert for building: 28754
+2025-09-13 13:08:14,232 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Invalid due to blocked entrance: Civilian (1338076808)
+2025-09-13 13:08:14,232 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Invalid due to low buriedness: Civilian (519054459)
+2025-09-13 13:08:14,232 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Potential targets count: 0
+2025-09-13 13:08:14,232 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] calc started at time 40, Current target: null
+2025-09-13 13:08:14,232 [DEBUG|FireBrigade/83091732|SampleSearch] unsearchedBuildingIDs: [33425, 33338]
+2025-09-13 13:08:14,232 [DEBUG|FireBrigade/83091732|SampleSearch] best path is: [3831, 299, 9429, 6801, 1839, 8061, 2517, 1899, 7197, 3363, 317, 8916, 7188, 4965, 3012, 7575, 352, 4155, 33357, 4956, 33169, 33179, 33190, 33191, 33234, 33282, 33431, 33447, 33425]
+2025-09-13 13:08:14,232 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Path planning result: 29 steps
+2025-09-13 13:08:14,232 [DEBUG|FireBrigade/83091732|SampleSearch] Detected blockade at: 9429
+2025-09-13 13:08:14,232 [DEBUG|FireBrigade/83091732|SampleSearch] Temporarily removed target: 33425
+2025-09-13 13:08:14,232 [DEBUG|FireBrigade/83091732|SampleSearch] Replanned path: [3831, 299, 9429, 6801, 1839, 8061, 2517, 1899, 7197, 3363, 317, 8916, 7188, 4965, 3012, 7575, 352, 4155, 33357, 4956, 33169, 33179, 33190, 33191, 33234, 33282, 33354, 33338]
+2025-09-13 13:08:14,232 [DEBUG|FireBrigade/83091732|SampleSearch] chose: 33282
+2025-09-13 13:08:14,232 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Final target selected: 33282
+2025-09-13 13:08:20,127 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:41
+2025-09-13 13:08:20,127 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 41, Position: 8916, Searched buildings: 24, Unsearched buildings: 1, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:08:20,127 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Sent blockade alert for building: 28754
+2025-09-13 13:08:20,127 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Invalid due to blocked entrance: Civilian (1338076808)
+2025-09-13 13:08:20,127 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Invalid due to low buriedness: Civilian (519054459)
+2025-09-13 13:08:20,127 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Potential targets count: 0
+2025-09-13 13:08:20,127 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] calc started at time 41, Current target: null
+2025-09-13 13:08:20,127 [DEBUG|FireBrigade/83091732|SampleSearch] unsearchedBuildingIDs: [33338]
+2025-09-13 13:08:20,128 [DEBUG|FireBrigade/83091732|SampleSearch] best path is: [8916, 7188, 4965, 3012, 7575, 352, 4155, 33357, 4956, 33169, 33179, 33190, 33191, 33234, 33282, 33354, 33338]
+2025-09-13 13:08:20,128 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Path planning result: 17 steps
+2025-09-13 13:08:20,128 [DEBUG|FireBrigade/83091732|SampleSearch] Detected blockade at: 7575
+2025-09-13 13:08:20,128 [DEBUG|FireBrigade/83091732|SampleSearch] Temporarily removed target: 33338
+2025-09-13 13:08:20,128 [DEBUG|FireBrigade/83091732|SampleSearch] chose: null
+2025-09-13 13:08:20,128 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] Final target selected: null
+2025-09-13 13:08:26,350 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:42
+2025-09-13 13:08:26,350 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 42, Position: 7188, Searched buildings: 27, Unsearched buildings: 0, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:08:26,350 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Sent blockade alert for building: 28754
+2025-09-13 13:08:26,350 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Invalid due to blocked entrance: Civilian (1338076808)
+2025-09-13 13:08:26,350 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Invalid due to low buriedness: Civilian (519054459)
+2025-09-13 13:08:26,350 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Potential targets count: 1
+2025-09-13 13:08:26,350 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Selected target: Civilian (556115289) with ID: 556115289
+2025-09-13 13:08:32,410 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:43
+2025-09-13 13:08:32,410 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 43, Position: 4533, Searched buildings: 0, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:08:38,909 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:44
+2025-09-13 13:08:38,910 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 44, Position: 33987, Searched buildings: 4, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:08:45,139 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:45
+2025-09-13 13:08:45,139 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 45, Position: 33987, Searched buildings: 9, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:08:51,398 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:46
+2025-09-13 13:08:51,398 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 46, Position: 33987, Searched buildings: 9, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:08:56,849 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:47
+2025-09-13 13:08:56,849 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 47, Position: 33987, Searched buildings: 9, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:09:02,633 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:48
+2025-09-13 13:09:02,633 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 48, Position: 33987, Searched buildings: 9, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:09:08,347 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:49
+2025-09-13 13:09:08,347 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 49, Position: 33987, Searched buildings: 9, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:09:13,623 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:50
+2025-09-13 13:09:13,624 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 50, Position: 33987, Searched buildings: 9, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:09:19,909 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:51
+2025-09-13 13:09:19,909 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 51, Position: 33987, Searched buildings: 9, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:09:26,383 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:52
+2025-09-13 13:09:26,383 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 52, Position: 33987, Searched buildings: 9, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:09:31,801 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:53
+2025-09-13 13:09:31,801 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 53, Position: 33987, Searched buildings: 9, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:09:36,999 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:54
+2025-09-13 13:09:36,999 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 54, Position: 33987, Searched buildings: 9, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:09:42,370 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:55
+2025-09-13 13:09:42,370 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 55, Position: 33987, Searched buildings: 9, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:09:49,239 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:56
+2025-09-13 13:09:49,239 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 56, Position: 33987, Searched buildings: 9, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:09:54,349 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:57
+2025-09-13 13:09:54,349 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 57, Position: 33987, Searched buildings: 9, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:09:59,573 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:58
+2025-09-13 13:09:59,573 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 58, Position: 33987, Searched buildings: 9, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:10:04,932 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:59
+2025-09-13 13:10:04,932 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 59, Position: 33987, Searched buildings: 9, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:10:10,130 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:60
+2025-09-13 13:10:10,130 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 60, Position: 33987, Searched buildings: 9, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:10:15,199 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:61
+2025-09-13 13:10:15,199 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 61, Position: 33987, Searched buildings: 9, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:10:20,570 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:62
+2025-09-13 13:10:20,571 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 62, Position: 33987, Searched buildings: 9, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:10:25,821 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:63
+2025-09-13 13:10:25,821 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 63, Position: 33987, Searched buildings: 9, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:10:31,419 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:64
+2025-09-13 13:10:31,419 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 64, Position: 33987, Searched buildings: 9, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:10:36,750 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:65
+2025-09-13 13:10:36,750 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 65, Position: 33987, Searched buildings: 9, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:10:41,946 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:66
+2025-09-13 13:10:41,946 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 66, Position: 33987, Searched buildings: 9, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:10:47,022 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:67
+2025-09-13 13:10:47,023 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 67, Position: 33987, Searched buildings: 9, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:10:53,085 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:68
+2025-09-13 13:10:53,085 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 68, Position: 33987, Searched buildings: 9, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:10:57,735 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:69
+2025-09-13 13:10:57,735 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 69, Position: 33987, Searched buildings: 9, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:11:02,483 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:70
+2025-09-13 13:11:02,483 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 70, Position: 34623, Searched buildings: 9, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:11:07,573 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:71
+2025-09-13 13:11:07,573 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 71, Position: 8736, Searched buildings: 11, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:11:12,592 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:72
+2025-09-13 13:11:12,592 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 72, Position: 5532, Searched buildings: 17, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:11:18,423 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:73
+2025-09-13 13:11:18,423 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 73, Position: 7764, Searched buildings: 22, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:11:24,079 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:74
+2025-09-13 13:11:24,079 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 74, Position: 620, Searched buildings: 26, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:11:30,169 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:75
+2025-09-13 13:11:30,169 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 75, Position: 25792, Searched buildings: 31, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:11:30,169 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Invalid due to low buriedness: Civilian (556115289)
+2025-09-13 13:11:30,169 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Invalid Human:Civilian (556115289) ==>reset target
+2025-09-13 13:11:30,169 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Sent blockade alert for building: 28754
+2025-09-13 13:11:30,169 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Invalid due to blocked entrance: Civilian (1338076808)
+2025-09-13 13:11:30,169 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Invalid due to low buriedness: Civilian (556115289)
+2025-09-13 13:11:30,169 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Potential targets count: 6
+2025-09-13 13:11:35,184 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:76
+2025-09-13 13:11:35,184 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 76, Position: 25792, Searched buildings: 33, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:11:35,184 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Sent blockade alert for building: 28754
+2025-09-13 13:11:35,184 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Invalid due to blocked entrance: Civilian (1338076808)
+2025-09-13 13:11:35,184 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Invalid due to low buriedness: Civilian (556115289)
+2025-09-13 13:11:35,184 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Potential targets count: 6
+2025-09-13 13:11:41,273 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:77
+2025-09-13 13:11:41,273 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 77, Position: 25792, Searched buildings: 33, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:11:41,273 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Sent blockade alert for building: 28754
+2025-09-13 13:11:41,273 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Invalid due to blocked entrance: Civilian (1338076808)
+2025-09-13 13:11:41,273 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Invalid due to low buriedness: Civilian (556115289)
+2025-09-13 13:11:41,273 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Potential targets count: 6
+2025-09-13 13:11:46,118 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:78
+2025-09-13 13:11:46,118 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 78, Position: 25792, Searched buildings: 33, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:11:46,118 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Invalid due to low buriedness: Civilian (556115289)
+2025-09-13 13:11:46,118 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Potential targets count: 6
+2025-09-13 13:11:51,200 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:79
+2025-09-13 13:11:51,200 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 79, Position: 25792, Searched buildings: 33, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:11:51,200 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Invalid due to low buriedness: Civilian (556115289)
+2025-09-13 13:11:51,200 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Potential targets count: 7
+2025-09-13 13:11:56,766 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:80
+2025-09-13 13:11:56,766 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 80, Position: 25792, Searched buildings: 33, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:11:56,766 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Invalid due to low buriedness: Civilian (556115289)
+2025-09-13 13:11:56,766 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Potential targets count: 7
+2025-09-13 13:12:01,477 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:81
+2025-09-13 13:12:01,477 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 81, Position: 25792, Searched buildings: 33, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:12:01,477 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Invalid due to low buriedness: Civilian (556115289)
+2025-09-13 13:12:01,477 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Potential targets count: 7
+2025-09-13 13:12:06,376 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:82
+2025-09-13 13:12:06,376 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 82, Position: 25792, Searched buildings: 33, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:12:06,377 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Invalid due to low buriedness: Civilian (556115289)
+2025-09-13 13:12:06,377 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Potential targets count: 8
+2025-09-13 13:12:10,951 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Time:83
+2025-09-13 13:12:10,951 [DEBUG|FireBrigade/83091732|SampleSearch] [Search] updateInfo at time 83, Position: 25792, Searched buildings: 33, Unsearched buildings: 4, Patrol targets: 0, Recoverable targets: 4
+2025-09-13 13:12:10,951 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Invalid due to low buriedness: Civilian (556115289)
+2025-09-13 13:12:10,951 [DEBUG|FireBrigade/83091732|SampleHumanDetector] Potential targets count: 8
