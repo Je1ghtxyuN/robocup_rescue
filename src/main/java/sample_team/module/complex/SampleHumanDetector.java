@@ -4,6 +4,8 @@ import static rescuecore2.standard.entities.StandardEntityURN.AMBULANCE_TEAM;
 import static rescuecore2.standard.entities.StandardEntityURN.CIVILIAN;
 import static rescuecore2.standard.entities.StandardEntityURN.REFUGE;
 import adf.core.agent.communication.MessageManager;
+import adf.core.agent.communication.standard.bundle.StandardMessagePriority;
+import adf.core.agent.communication.standard.bundle.information.MessageRoad;
 import adf.core.agent.develop.DevelopData;
 import adf.core.agent.info.AgentInfo;
 import adf.core.agent.info.ScenarioInfo;
@@ -17,19 +19,15 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
-// import java.util.Set;
-
+import java.util.Map;
+import java.util.HashMap;
 import org.apache.log4j.Logger;
 
-// import com.fasterxml.jackson.annotation.JsonFormat.Shape;
-
-// import rescuecore2.misc.geometry.Line2D;
-// import rescuecore2.standard.entities.*;
 import rescuecore2.standard.entities.Blockade;
+import rescuecore2.standard.entities.Road;
+import rescuecore2.standard.entities.Human;
 import rescuecore2.standard.entities.Building;
 import rescuecore2.standard.entities.Edge;
-import rescuecore2.standard.entities.Human;
-import rescuecore2.standard.entities.Road;
 import rescuecore2.standard.entities.StandardEntity;
 import rescuecore2.standard.entities.StandardEntityURN;
 import rescuecore2.worldmodel.EntityID;
@@ -53,6 +51,14 @@ public class SampleHumanDetector extends HumanDetector {
     private static final int MIN_DAMAGE_THRESHOLD = 50;  // 伤害低于此值认为无效
     private static final int MIN_BURIEDNESS_THRESHOLD = 30; // 掩埋程度高于此值认为无效
 
+    // 新增：卡住检测相关字段
+    private EntityID lastPosition;//上一回合位置
+    private int stuckCount = 0;  // 被卡住的计数
+    
+    // 新增：协调字段 - 记录已发送请求的位置和时间
+    private static final Map<EntityID, Integer> sentHelpRequests = new HashMap<>();
+    private static final int REQUEST_COOLDOWN = 10; // 请求冷却时间
+
     public SampleHumanDetector(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager, DevelopData developData) {
         super(ai, wi, si, moduleManager, developData);
         logger = DefaultLogger.getLogger(agentInfo.me());
@@ -65,8 +71,120 @@ public class SampleHumanDetector extends HumanDetector {
     public HumanDetector updateInfo(MessageManager messageManager) {
         logger.debug("Time:" + agentInfo.getTime());
         super.updateInfo(messageManager);
+        // 检查是否被卡住并发送求助信息
+        checkStuckAndRequestHelp(messageManager);
         return this;
     }
+
+    /**
+     * 检查是否被卡住，如果卡住太久就发送求助信息给警察
+     */
+    private void checkStuckAndRequestHelp(MessageManager messageManager) {
+        EntityID currentPosition = agentInfo.getPosition();
+        logger.debug("上一次位置: " + lastPosition + " ,当前位置："+currentPosition);
+        // 检查是否移动了
+        if (lastPosition != null && lastPosition.equals(currentPosition)) {
+            stuckCount++;
+            logger.debug("智能体被卡住: " + stuckCount + " 次");
+        } else {
+            if (stuckCount > 0) {
+                logger.debug("智能体重新开始移动，重置计数器");
+            }
+            stuckCount = 0;
+        }
+        
+        // 如果被卡住超过2个时间步，就发送道路信息给警察求助
+        if (stuckCount >= 2) {
+            sendRoadHelpRequest(messageManager, currentPosition);
+            stuckCount = 0;  // 重置计数器，避免重复发送
+        }
+        
+        lastPosition = currentPosition;
+        
+        // 清理过期的请求记录
+        cleanupOldRequests();
+    }
+    
+    /**
+     * 清理过期的请求记录
+     */
+    private void cleanupOldRequests() {
+        int currentTime = agentInfo.getTime();
+        sentHelpRequests.entrySet().removeIf(entry -> 
+            currentTime - entry.getValue() > REQUEST_COOLDOWN);
+    }
+
+    /**
+     * 发送道路求助请求给警察
+     */
+    private void sendRoadHelpRequest(MessageManager messageManager, EntityID position) {
+        // 检查是否已有其他救援单位发送了相同位置的请求
+        if (sentHelpRequests.containsKey(position)) {
+            logger.debug("已有其他救援单位请求处理位置 " + position + "，跳过发送");
+            return;
+        }
+        
+        StandardEntity entity = worldInfo.getEntity(position);
+        
+        if (entity instanceof Road) {
+            Road road = (Road) entity;
+            
+            // 检查道路上是否有障碍物
+            if (road.isBlockadesDefined() && !road.getBlockades().isEmpty()) {
+                // 获取第一个障碍物信息
+                EntityID blockadeID = road.getBlockades().iterator().next();
+                Blockade blockade = (Blockade) worldInfo.getEntity(blockadeID);
+                
+                if (blockade != null) {
+                    // 检查是否有消防员在同一位置
+                    boolean hasFirefighterAtLocation = checkFirefighterAtLocation(position);
+                    
+                    // 如果有消防员在同一位置，让消防员处理
+                    if (hasFirefighterAtLocation) {
+                        logger.debug("位置 " + position + " 已有消防员处理，跳过发送");
+                        return;
+                    }
+                    
+                    // 记录已发送的请求
+                    sentHelpRequests.put(position, agentInfo.getTime());
+                    
+                    // 创建道路信息消息，包含障碍物信息
+                    MessageRoad roadMessage = new MessageRoad(
+                        true,  // 使用无线电通道
+                        StandardMessagePriority.HIGH,  // 高优先级
+                        road,    // 道路信息
+                        blockade, // 障碍物信息
+                        false,   // 道路不可通行
+                        true     // 发送障碍物位置信息
+                    );
+                    
+                    // 发送消息
+                    messageManager.addMessage(roadMessage);
+                    
+                    logger.warn("救护队发送求助信息: 道路 " + position + " 被障碍物 " + blockadeID + " 阻挡，请求警察清理！");
+                }
+            } else {
+                logger.debug("道路 " + position + " 没有障碍物，可能是其他原因卡住");
+            }
+        }
+    }
+    
+    /**
+     * 检查是否有消防员在同一位置
+     */
+    private boolean checkFirefighterAtLocation(EntityID position) {
+    for (StandardEntity entity : worldInfo.getEntitiesOfType(StandardEntityURN.FIRE_BRIGADE)) {
+        // 确保实体是Human类型（FireBrigade是Human的子类）
+        if (entity instanceof Human) {
+            Human firefighter = (Human) entity;
+            if (firefighter.isPositionDefined() && 
+                firefighter.getPosition().equals(position)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
 
     @Override
     public HumanDetector calc() {
@@ -324,5 +442,4 @@ public class SampleHumanDetector extends HumanDetector {
         }
         return false;
     }
-
 }
