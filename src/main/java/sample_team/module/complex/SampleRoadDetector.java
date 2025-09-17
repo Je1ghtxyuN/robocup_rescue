@@ -1,7 +1,6 @@
 package sample_team.module.complex;
 
 import adf.core.agent.communication.MessageManager;
-import adf.core.agent.communication.standard.bundle.StandardMessagePriority;
 import adf.core.agent.communication.standard.bundle.information.MessageRoad;
 import adf.core.agent.develop.DevelopData;
 import adf.core.agent.info.AgentInfo;
@@ -47,10 +46,10 @@ public class SampleRoadDetector extends RoadDetector {
     private static final int EMERGENCY_SERVICE_RANGE = 3000000; // 3000米范围内的紧急服务
     private static final double BASE_EMERGENCY_FACTOR = 3.0; // 跟随救护消防（似乎没用）
 
-    // 新增：求助请求列表
+    // 求助请求列表
     private List<EntityID> helpRequests = new ArrayList<>();  // 收到的求助请求列表
     
-    // 新增：记录已处理的请求位置，防止重复处理
+    // 记录已处理的请求位置，防止重复处理
     private static final Map<EntityID, Integer> processedHelpRequests = new HashMap<>();
     private static final int PROCESSED_COOLDOWN = 15; // 处理冷却时间
 
@@ -80,7 +79,7 @@ public class SampleRoadDetector extends RoadDetector {
         super.updateInfo(messageManager);
         this.currentTime = agentInfo.getTime();
         
-        // 新增：处理来自救护队的道路求助消息
+        // 处理来自救护队的道路求助消息
         processRoadHelpRequests(messageManager);
         
         // 清理过期的处理记录
@@ -633,21 +632,6 @@ private Map<EntityID, EntityID> getAmbulancePositions() {
     return positions;
 }
 
-// 获取其他警察位置（排除自己）
-private Map<EntityID, EntityID> getOtherPolicePositions() {
-    Map<EntityID, EntityID> positions = new HashMap<>();
-    for (StandardEntity entity : worldInfo.getEntitiesOfType(StandardEntityURN.POLICE_FORCE)) {
-        if (entity instanceof PoliceForce) {
-            PoliceForce pf = (PoliceForce) entity;
-            // 排除自己
-            if (!pf.getID().equals(agentInfo.getID()) && pf.isPositionDefined()) {
-                positions.put(pf.getID(), pf.getPosition());
-            }
-        }
-    }
-    return positions;
-}
-
     // 计算紧急服务权重因子
     private double calculateEmergencyServiceFactor(EntityID blockadePosition) {
     double emergencyFactor = 1.0; // 默认权重
@@ -675,31 +659,5 @@ private Map<EntityID, EntityID> getOtherPolicePositions() {
     }
     
     return emergencyFactor;
-    }
-
-    // 获取与紧急服务相关的障碍物
-    private List<Blockade> getEmergencyServiceBlockades(List<Blockade> allBlockades) {
-        List<Blockade> emergencyBlockades = new ArrayList<>();
-        
-        // 获取所有紧急服务位置
-        Map<EntityID, EntityID> firePositions = getFireBrigadePositions();
-        Map<EntityID, EntityID> ambulancePositions = getAmbulancePositions();
-        
-        // 合并所有紧急服务位置
-        Set<EntityID> allEmergencyPositions = new HashSet<>();
-        allEmergencyPositions.addAll(firePositions.values());
-        allEmergencyPositions.addAll(ambulancePositions.values());
-        
-        // 查找这些位置附近的障碍物
-        for (EntityID emergencyPos : allEmergencyPositions) {
-            for (Blockade blockade : allBlockades) {
-                int distance = worldInfo.getDistance(emergencyPos, blockade.getPosition());
-                if (distance >= 0 && distance <= EMERGENCY_SERVICE_RANGE) {
-                    emergencyBlockades.add(blockade);
-                }
-            }
-        }
-        
-        return emergencyBlockades;
     }
 }
