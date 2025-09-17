@@ -370,9 +370,12 @@ public class SampleHumanDetector extends HumanDetector {
             return false;
         }
 
-        if (target.getBuriedness() == 0){
-            logger.debug("Invalid due to low buriedness: " + target);
+        // 只有消防队才检查掩埋程度是否为0
+        if (agentInfo.me().getStandardURN() == StandardEntityURN.FIRE_BRIGADE) {
+            if (target.getBuriedness() == 0) {
+                logger.debug("Invalid due to low buriedness: " + target);
             return false;
+            }
         }
 
         StandardEntity position = worldInfo.getPosition(target);
