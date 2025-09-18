@@ -220,12 +220,34 @@ public class DefaultExtActionTransport extends ExtAction {
       if (position != null && position.getStandardURN() == REFUGE) {
         return new ActionUnload();
       } else {
-        pathPlanning.setFrom(agentPosition);
-        pathPlanning.setDestination(this.worldInfo.getEntityIDsOfType(REFUGE));
-        List<EntityID> path = pathPlanning.calc().getResult();
-        if (path != null && path.size() > 0) {
-          return new ActionMove(path);
+        // 修改部分：选择最短路径的避难所
+        Collection<EntityID> refugeIDs = this.worldInfo.getEntityIDsOfType(REFUGE);
+        List<EntityID> shortestPath = null;
+        EntityID nearestRefuge = null;
+        
+        // 遍历所有避难所，找到路径最短的
+        for (EntityID refugeID : refugeIDs) {
+          pathPlanning.setFrom(agentPosition);
+          pathPlanning.setDestination(refugeID);
+          List<EntityID> path = pathPlanning.calc().getResult();
+          if (path != null && path.size() > 0) {
+            if (shortestPath == null || path.size() < shortestPath.size()) {
+              shortestPath = path;
+              nearestRefuge = refugeID;
+            }
+          }
         }
+        
+        if (nearestRefuge != null) {
+          // 重新计算到最近避难所的路径
+          pathPlanning.setFrom(agentPosition);
+          pathPlanning.setDestination(nearestRefuge);
+          List<EntityID> path = pathPlanning.calc().getResult();
+          if (path != null && path.size() > 0) {
+            return new ActionMove(path);
+          }
+        }
+        return null;
       }
     }
     if (targetID == null) {
@@ -255,11 +277,32 @@ public class DefaultExtActionTransport extends ExtAction {
         return calcRefugeAction(agent, pathPlanning,
             Lists.newArrayList(human.getPosition()), true);
       }
-      pathPlanning.setFrom(agentPosition);
-      pathPlanning.setDestination(this.worldInfo.getEntityIDsOfType(REFUGE));
-      List<EntityID> path = pathPlanning.calc().getResult();
-      if (path != null && path.size() > 0) {
-        return new ActionMove(path);
+      // 修改部分：选择最短路径的避难所
+      Collection<EntityID> refugeIDs = this.worldInfo.getEntityIDsOfType(REFUGE);
+      List<EntityID> shortestPath = null;
+      EntityID nearestRefuge = null;
+      
+      // 遍历所有避难所，找到路径最短的
+      for (EntityID refugeID : refugeIDs) {
+        pathPlanning.setFrom(agentPosition);
+        pathPlanning.setDestination(refugeID);
+        List<EntityID> path = pathPlanning.calc().getResult();
+        if (path != null && path.size() > 0) {
+          if (shortestPath == null || path.size() < shortestPath.size()) {
+            shortestPath = path;
+            nearestRefuge = refugeID;
+          }
+        }
+      }
+      
+      if (nearestRefuge != null) {
+        // 重新计算到最近避难所的路径
+        pathPlanning.setFrom(agentPosition);
+        pathPlanning.setDestination(nearestRefuge);
+        List<EntityID> path = pathPlanning.calc().getResult();
+        if (path != null && path.size() > 0) {
+          return new ActionMove(path);
+        }
       }
     }
     return null;
@@ -319,35 +362,50 @@ public class DefaultExtActionTransport extends ExtAction {
     if (refuges.contains(position)) {
       return isUnload ? new ActionUnload() : new ActionRest();
     }
-    List<EntityID> firstResult = null;
-    while (refuges.size() > 0) {
+    
+    // 修改部分：选择最短路径且能到达后续目标的避难所
+    List<EntityID> bestPath = null;
+    EntityID bestRefuge = null;
+    
+    for (EntityID refugeID : refuges) {
       pathPlanning.setFrom(position);
-      pathPlanning.setDestination(refuges);
-      List<EntityID> path = pathPlanning.calc().getResult();
-      if (path != null && path.size() > 0) {
-        if (firstResult == null) {
-          firstResult = new ArrayList<>(path);
-          if (targets == null || targets.isEmpty()) {
-            break;
+      pathPlanning.setDestination(refugeID);
+      List<EntityID> pathToRefuge = pathPlanning.calc().getResult();
+      
+      if (pathToRefuge != null && pathToRefuge.size() > 0) {
+        // 检查从避难所到目标是否可达（如果有目标）
+        if (targets != null && !targets.isEmpty()) {
+          pathPlanning.setFrom(refugeID);
+          pathPlanning.setDestination(targets);
+          List<EntityID> pathFromRefuge = pathPlanning.calc().getResult();
+          
+          if (pathFromRefuge != null && pathFromRefuge.size() > 0) {
+            // 选择总路径最短的避难所
+            if (bestPath == null || pathToRefuge.size() < bestPath.size()) {
+              bestPath = pathToRefuge;
+              bestRefuge = refugeID;
+            }
+          }
+        } else {
+          // 没有后续目标，只考虑到达避难所的路径
+          if (bestPath == null || pathToRefuge.size() < bestPath.size()) {
+            bestPath = pathToRefuge;
+            bestRefuge = refugeID;
           }
         }
-        EntityID refugeID = path.get(path.size() - 1);
-        pathPlanning.setFrom(refugeID);
-        pathPlanning.setDestination(targets);
-        List<EntityID> fromRefugeToTarget = pathPlanning.calc().getResult();
-        if (fromRefugeToTarget != null && fromRefugeToTarget.size() > 0) {
-          return new ActionMove(path);
-        }
-        refuges.remove(refugeID);
-        // remove failed
-        if (size == refuges.size()) {
-          break;
-        }
-        size = refuges.size();
-      } else {
-        break;
       }
     }
-    return firstResult != null ? new ActionMove(firstResult) : null;
+    
+    if (bestRefuge != null) {
+      // 重新计算到最佳避难所的路径
+      pathPlanning.setFrom(position);
+      pathPlanning.setDestination(bestRefuge);
+      List<EntityID> path = pathPlanning.calc().getResult();
+      if (path != null && path.size() > 0) {
+        return new ActionMove(path);
+      }
+    }
+    
+    return null;
   }
 }
