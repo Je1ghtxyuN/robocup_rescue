@@ -78,6 +78,10 @@ public class SampleRoadDetector extends RoadDetector {
     private static final Map<EntityID, EntityID> reservedTargets = new HashMap<>();
     private static final Map<EntityID, Integer> reservationTimes = new HashMap<>();
     private static final int RESERVATION_TIMEOUT = 30; // 30时间单位后保留失效
+    
+    // 新增：避难所入口卡住求助相关字段
+    private static final Map<EntityID, Integer> refugeEntranceRequests = new HashMap<>();
+    private static final int REFUGE_ENTRANCE_REQUEST_COOLDOWN = 20;
 
     public SampleRoadDetector(AgentInfo ai, WorldInfo wi, ScenarioInfo si,
                             ModuleManager moduleManager, DevelopData developData) {
@@ -108,8 +112,14 @@ public class SampleRoadDetector extends RoadDetector {
         // 新增：处理来自救护队的道路求助消息
         processRoadHelpRequests(messageManager);
         
+        // 新增：处理来自救护队的避难所入口卡住求助
+        processRefugeEntranceHelpRequests(messageManager);
+        
         // 清理过期的处理记录
         cleanupOldProcessedRequests();
+        
+        // 清理过期的避难所入口求助
+        cleanupOldRefugeEntranceRequests();
         
         // 检查是否接触到了当前目标伤员
         if (currentTargetHuman != null) {
@@ -140,6 +150,15 @@ public class SampleRoadDetector extends RoadDetector {
         int currentTime = agentInfo.getTime();
         processedHelpRequests.entrySet().removeIf(entry -> 
             currentTime - entry.getValue() > PROCESSED_COOLDOWN);
+    }
+    
+    /**
+     * 清理过期的避难所入口求助
+     */
+    private void cleanupOldRefugeEntranceRequests() {
+        int currentTime = agentInfo.getTime();
+        refugeEntranceRequests.entrySet().removeIf(entry -> 
+            currentTime - entry.getValue() > REFUGE_ENTRANCE_REQUEST_COOLDOWN);
     }
     
     /**
@@ -177,6 +196,48 @@ public class SampleRoadDetector extends RoadDetector {
         }
     }
     
+    /**
+     * 新增：处理来自救护队的避难所入口卡住求助
+     */
+    private void processRefugeEntranceHelpRequests(MessageManager messageManager) {
+        // 获取收到的道路消息
+        List<CommunicationMessage> roadMessages = 
+            messageManager.getReceivedMessageList(MessageRoad.class);
+        
+        for (CommunicationMessage msg : roadMessages) {
+            MessageRoad roadMsg = (MessageRoad) msg;
+            
+            // 检查是否是避难所入口卡住求助（障碍物为null，不可通行）
+            if (!roadMsg.isBlockadeDefined() && 
+                roadMsg.isPassable() != null && 
+                !roadMsg.isPassable()) {
+                
+                // 使用反射检查自定义字段
+                try {
+                    java.lang.reflect.Field customField = roadMsg.getClass().getDeclaredField("custom");
+                    customField.setAccessible(true);
+                    String customValue = (String) customField.get(roadMsg);
+                    
+                    if ("refuge_entrance_stuck".equals(customValue)) {
+                        EntityID roadID = roadMsg.getRoadID();
+                        
+                        // 检查是否已被其他警察处理
+                        if (refugeEntranceRequests.containsKey(roadID)) {
+                            DefaultLogger.getLogger(agentInfo.me()).debug("忽略已处理的避难所入口求助: " + roadID);
+                            continue;
+                        }
+                        
+                        // 记录求助信息
+                        refugeEntranceRequests.put(roadID, agentInfo.getTime());
+                        DefaultLogger.getLogger(agentInfo.me()).info("警察收到避难所入口卡住求助: 位置 " + roadID);
+                    }
+                } catch (Exception e) {
+                    DefaultLogger.getLogger(agentInfo.me()).error("处理避难所入口求助时出错", e);
+                }
+            }
+        }
+    }
+    
      // 新增目标状态检查方法
     private boolean isTargetCleared(EntityID targetID) {
         StandardEntity entity = worldInfo.getEntity(targetID);
@@ -199,6 +260,14 @@ public class SampleRoadDetector extends RoadDetector {
         EntityID civilianTarget = findCivilianTarget();
         if (civilianTarget != null) {
             this.result = civilianTarget;
+            return this;
+        }
+        
+        // 新增：优先处理避难所入口卡住求助
+        EntityID refugeEntranceTarget = selectRefugeEntranceHelpTarget();
+        if (refugeEntranceTarget != null) {
+            this.result = refugeEntranceTarget;
+            DefaultLogger.getLogger(agentInfo.me()).info("警察优先处理避难所入口卡住求助，目标位置: " + refugeEntranceTarget);
             return this;
         }
         
@@ -260,6 +329,29 @@ public class SampleRoadDetector extends RoadDetector {
         }
         
         return this;
+    }
+
+    /**
+     * 新增：选择最近的避难所入口求助目标
+     */
+    private EntityID selectRefugeEntranceHelpTarget() {
+        if (refugeEntranceRequests.isEmpty()) {
+            return null;
+        }
+        
+        EntityID currentPosition = agentInfo.getPosition();
+        EntityID nearestRefugeEntrance = null;
+        int minDistance = Integer.MAX_VALUE;
+        
+        for (EntityID requestLocation : refugeEntranceRequests.keySet()) {
+            int distance = worldInfo.getDistance(currentPosition, requestLocation);
+            if (distance < minDistance) {
+                minDistance = distance;
+                nearestRefugeEntrance = requestLocation;
+            }
+        }
+        
+        return nearestRefugeEntrance;
     }
 
     // 新增：寻找市民目标（最高优先级）
@@ -446,11 +538,6 @@ public class SampleRoadDetector extends RoadDetector {
            mainRoadFactor * coordinationFactor * emergencyServiceFactor;
            
     }
-    
-    
-
-   
-
 
     private boolean isValidBlockade(Blockade blockade) {
         // 基础有效性检查
@@ -627,17 +714,6 @@ public class SampleRoadDetector extends RoadDetector {
         return blockadeArea.intersects(edgeLine.getBounds2D());
     }
 
-
-
-
-
-
-
-
-
-
-
-
         public boolean isBlockingRefuge(Blockade blockade) {
         if (blockade == null || !blockade.isPositionDefined()) {
             return false; // 障碍物无效或位置未定义，直接返回false
@@ -670,13 +746,6 @@ public class SampleRoadDetector extends RoadDetector {
         }
         return false; // 未找到匹配，障碍物不影响避难所
     }
-
-
-
-
-
-
-
 
    // 新增主干道判断方法
     private boolean isOnMainRoad(Blockade blockade) {
@@ -804,7 +873,10 @@ private Map<EntityID, EntityID> getOtherPolicePositions() {
         if (distance >= 0 && distance <= EMERGENCY_SERVICE_RANGE) {
             // 救护队员的优先级比消防员更高
             double proximityFactor = 1.0 + (1.0 - (distance / (double)EMERGENCY_SERVICE_RANGE));
-            emergencyFactor = Math.max(emergencyFactor, (BASE_EMERGENCY_FACTOR + 1.0) * proximityFactor);
+            emergencyFactor = Math.max(emergencyFactor, (
+
+
+BASE_EMERGENCY_FACTOR + 1.0) * proximityFactor);
         }
     }
     
