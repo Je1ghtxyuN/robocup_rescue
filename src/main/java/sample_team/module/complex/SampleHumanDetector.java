@@ -49,19 +49,15 @@ public class SampleHumanDetector extends HumanDetector {
     // 可调节的阈值参数inValidHuman
     private static final int MIN_HP_THRESHOLD = 1000;    // HP低于此值认为无效
     private static final int MIN_DAMAGE_THRESHOLD = 50;  // 伤害低于此值认为无效
-    private static final int MIN_BURIEDNESS_THRESHOLD = 30; // 掩埋程度高于此值认为无效
+    private static final int MIN_BURIEDNESS_THRESHOLD = 40; // 掩埋程度高于此值认为无效
 
-    // 新增：卡住检测相关字段
+    // 卡住检测相关字段
     private EntityID lastPosition;//上一回合位置
     private int stuckCount = 0;  // 被卡住的计数
     
-    // 新增：协调字段 - 记录已发送请求的位置和时间
+    // 协调字段 - 记录已发送请求的位置和时间
     private static final Map<EntityID, Integer> sentHelpRequests = new HashMap<>();
     private static final int REQUEST_COOLDOWN = 10; // 请求冷却时间
-    
-    // 新增：避难所入口卡住检测
-    private int refugeEntranceStuckCount = 0;
-    private static final int REFUGE_ENTRANCE_STUCK_THRESHOLD = 3;
 
     public SampleHumanDetector(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager, DevelopData developData) {
         super(ai, wi, si, moduleManager, developData);
@@ -77,14 +73,10 @@ public class SampleHumanDetector extends HumanDetector {
         super.updateInfo(messageManager);
         // 检查是否被卡住并发送求助信息
         checkStuckAndRequestHelp(messageManager);
-        // 新增：检查是否在避难所入口卡住
-        checkRefugeEntranceStuck(messageManager);
         return this;
     }
 
-    /**
-     * 检查是否被卡住，如果卡住太久就发送求助信息给警察
-     */
+    // 检查是否被卡住，如果卡住太久就发送求助信息给警察
     private void checkStuckAndRequestHelp(MessageManager messageManager) {
         EntityID currentPosition = agentInfo.getPosition();
         logger.debug("上一次位置: " + lastPosition + " ,当前位置："+currentPosition);
@@ -111,72 +103,20 @@ public class SampleHumanDetector extends HumanDetector {
         cleanupOldRequests();
     }
     
-    /**
-     * 新增：检查是否在避难所入口卡住
-     */
-    private void checkRefugeEntranceStuck(MessageManager messageManager) {
-        EntityID currentPosition = agentInfo.getPosition();
-        
-        // 检查是否在避难所入口
-        if (isAtRefugeEntrance(currentPosition)) {
-            refugeEntranceStuckCount++;
-            logger.debug("在避难所入口卡住: " + refugeEntranceStuckCount + " 次");
-            
-            // 如果卡住超过阈值，发送特殊求助信息
-            if (refugeEntranceStuckCount >= REFUGE_ENTRANCE_STUCK_THRESHOLD) {
-                sendRefugeEntranceHelpRequest(messageManager, currentPosition);
-                refugeEntranceStuckCount = 0;  // 重置计数器
-            }
-        } else {
-            refugeEntranceStuckCount = 0;  // 不在避难所入口，重置计数器
-        }
-    }
-    
-    /**
-     * 新增：检查是否在避难所入口
-     */
-    private boolean isAtRefugeEntrance(EntityID position) {
-        StandardEntity entity = worldInfo.getEntity(position);
-        if (!(entity instanceof Road)) {
-            return false;
-        }
-        
-        Road road = (Road) entity;
-        
-        // 检查道路是否连接避难所
-        for (Edge edge : road.getEdges()) {
-            if (edge.isPassable()) {
-                EntityID neighbourID = edge.getNeighbour();
-                if (neighbourID != null) {
-                    StandardEntity neighbour = worldInfo.getEntity(neighbourID);
-                    if (neighbour != null && neighbour.getStandardURN() == StandardEntityURN.REFUGE) {
-                        return true;
-                    }
-                }
-            }
-        }
-        
-        return false;
-    }
-    
-    /**
-     * 清理过期的请求记录
-     */
+    // 清理过期的请求记录
     private void cleanupOldRequests() {
         int currentTime = agentInfo.getTime();
         sentHelpRequests.entrySet().removeIf(entry -> 
             currentTime - entry.getValue() > REQUEST_COOLDOWN);
     }
 
-    /**
-     * 发送道路求助请求给警察
-     */
+    // 发送道路求助请求给警察
     private void sendRoadHelpRequest(MessageManager messageManager, EntityID position) {
         // 检查是否已有其他救援单位发送了相同位置的请求
-        if (sentHelpRequests.containsKey(position)) {
-            logger.debug("已有其他救援单位请求处理位置 " + position + "，跳过发送");
-            return;
-        }
+        // if (sentHelpRequests.containsKey(position)) {
+        //     logger.debug("已有其他救援单位请求处理位置 " + position + "，跳过发送");
+        //     return;
+        // }
         
         StandardEntity entity = worldInfo.getEntity(position);
         
@@ -190,15 +130,6 @@ public class SampleHumanDetector extends HumanDetector {
                 Blockade blockade = (Blockade) worldInfo.getEntity(blockadeID);
                 
                 if (blockade != null) {
-                    // 检查是否有消防员在同一位置
-                    boolean hasFirefighterAtLocation = checkFirefighterAtLocation(position);
-                    
-                    // 如果有消防员在同一位置，让消防员处理
-                    if (hasFirefighterAtLocation) {
-                        logger.debug("位置 " + position + " 已有消防员处理，跳过发送");
-                        return;
-                    }
-                    
                     // 记录已发送的请求
                     sentHelpRequests.put(position, agentInfo.getTime());
                     
@@ -221,68 +152,6 @@ public class SampleHumanDetector extends HumanDetector {
                 logger.debug("道路 " + position + " 没有障碍物，可能是其他原因卡住");
             }
         }
-    }
-    
-    /**
-     * 新增：发送避难所入口求助请求
-     */
-    private void sendRefugeEntranceHelpRequest(MessageManager messageManager, EntityID position) {
-        // 检查是否已有其他救援单位发送了相同位置的请求
-        if (sentHelpRequests.containsKey(position)) {
-            logger.debug("已有其他救援单位请求处理位置 " + position + "，跳过发送");
-            return;
-        }
-        
-        StandardEntity entity = worldInfo.getEntity(position);
-        
-        if (entity instanceof Road) {
-            Road road = (Road) entity;
-            
-            // 记录已发送的请求
-            sentHelpRequests.put(position, agentInfo.getTime());
-            
-            // 创建特殊的道路信息消息，表示在避难所入口卡住
-            // 使用null作为障碍物，并在消息中设置特殊标志
-            MessageRoad roadMessage = new MessageRoad(
-                true,  // 使用无线电通道
-                StandardMessagePriority.HIGH,  // 高优先级
-                road,    // 道路信息
-                null,    // 没有障碍物信息，表示特殊请求
-                false,   // 道路不可通行
-                false    // 不发送障碍物位置信息
-            );
-            
-            // 设置自定义属性表示这是避难所入口卡住请求
-            try {
-                java.lang.reflect.Field customField = roadMessage.getClass().getDeclaredField("custom");
-                customField.setAccessible(true);
-                customField.set(roadMessage, "refuge_entrance_stuck");
-            } catch (Exception e) {
-                logger.error("无法设置自定义属性", e);
-            }
-            
-            // 发送消息
-            messageManager.addMessage(roadMessage);
-            
-            logger.warn("救护队发送避难所入口卡住求助信息: 位置 " + position + "，请求警察协助！");
-        }
-    }
-    
-    /**
-     * 检查是否有消防员在同一位置
-     */
-    private boolean checkFirefighterAtLocation(EntityID position) {
-        for (StandardEntity entity : worldInfo.getEntitiesOfType(StandardEntityURN.FIRE_BRIGADE)) {
-            // 确保实体是Human类型（FireBrigade是Human的子类）
-            if (entity instanceof Human) {
-                Human firefighter = (Human) entity;
-                if (firefighter.isPositionDefined() && 
-                    firefighter.getPosition().equals(position)) {
-                    return true;
-                }
-            }
-        }
-        return false;
     }
 
     @Override
@@ -332,9 +201,9 @@ public class SampleHumanDetector extends HumanDetector {
         private WorldInfo worldInfo;
 
         // 权重配置 - 可以根据实际需求调整这些值
-        private static final double DISTANCE_WEIGHT = 0.5;
+        private static final double DISTANCE_WEIGHT = 0.7;
         private static final double HP_WEIGHT = 0.2;
-        private static final double BURIEDNESS_WEIGHT = 0.15;
+        private static final double BURIEDNESS_WEIGHT = 0.3;
         private static final double DAMAGE_WEIGHT = 0.15;
 
         WeightedPrioritySorter(WorldInfo wi, StandardEntity reference) {
