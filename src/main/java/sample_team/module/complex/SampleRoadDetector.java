@@ -42,9 +42,9 @@ public class SampleRoadDetector extends RoadDetector {
     private static final int MIN_BURIEDNESS_THRESHOLD = 30;
 
     // 权重配置
-    private static final double DISTANCE_WEIGHT = 0.7;
+    private static final double DISTANCE_WEIGHT = 0.5;
     private static final double HP_WEIGHT = 0.2;
-    private static final double BURIEDNESS_WEIGHT = 0.3;
+    private static final double BURIEDNESS_WEIGHT = 0.15;
     private static final double DAMAGE_WEIGHT = 0.15;
 
     // 当前锁定的目标及锁定时间
@@ -64,7 +64,7 @@ public class SampleRoadDetector extends RoadDetector {
     // 因子权重参数
     private static final double BASE_VISIBILITY_FACTOR = 1.5;//可见性
     private static final double BASE_ENTRANCE_FACTOR = 3.0;//门
-    private static final double BASE_MAIN_ROAD_FACTOR = 2.0;//主干道
+    private static final double BASE_MAIN_ROAD_FACTOR = 3.0;//主干道
     private static final double BASE_COORDINATION_FACTOR = 0.3;
 
     // 求助请求列表
