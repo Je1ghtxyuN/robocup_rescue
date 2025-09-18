@@ -91,6 +91,11 @@ public class SampleSearch extends Search {
         registerModule(this.pathPlanning);
     }
 
+    // 添加获取已搜索建筑列表的方法
+    public Set<EntityID> getSearchedBuildings() {
+        return Collections.unmodifiableSet(searchedBuildings);
+    }
+
     @Override
     public Search updateInfo(MessageManager messageManager) {
         logger.debug("Time:" + agentInfo.getTime());
@@ -224,7 +229,7 @@ public class SampleSearch extends Search {
         // 当智能体为警察时
         if (agentURN == POLICE_FORCE) {
 
-            // 新增：优先处理视野内障碍物
+            // 优先处理视野内障碍物
             EntityID visibleBlockade = findVisibleBlockade();
             if (visibleBlockade != null) {
                 this.result = visibleBlockade;
@@ -398,9 +403,6 @@ public class SampleSearch extends Search {
         int distance = worldInfo.getDistance(agentInfo.getPosition(), areaID);
         value += distance / 100; // 每100米增加1点值
         
-        // 3. 上次访问时间：长时间未访问的区域价值低
-        // （这里简化处理，实际可以记录每个区域的最后访问时间）
-        
         return value;
     }
 
@@ -429,7 +431,7 @@ public class SampleSearch extends Search {
             if (blockade != null) return blockade;
         }
 
-        // 新增：检查巡逻路径上的障碍
+        // 3. 检查巡逻路径上的障碍
         for (EntityID patrolPoint : patrolTargets) {
             pathPlanning.setFrom(agentInfo.getPosition());
             pathPlanning.setDestination(patrolPoint);
