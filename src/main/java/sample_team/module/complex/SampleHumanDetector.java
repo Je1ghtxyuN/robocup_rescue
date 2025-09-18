@@ -161,7 +161,7 @@ public class SampleHumanDetector extends HumanDetector {
                     // 发送消息
                     messageManager.addMessage(roadMessage);
                     
-                    logger.warn("救护队发送求助信息: 道路 " + position + " 被障碍物 " + blockadeID + " 阻挡，请求警察清理！");
+                    logger.debug("救护队发送求助信息: 道路 " + position + " 被障碍物 " + blockadeID + " 阻挡，请求警察清理！");
                 }
             } else {
                 logger.debug("道路 " + position + " 没有障碍物，可能是其他原因卡住");
@@ -175,6 +175,7 @@ public class SampleHumanDetector extends HumanDetector {
     private void processFireRescueMessages(MessageManager messageManager) {
         // 获取收到的MessageCivilian消息
         List<CommunicationMessage> messages = messageManager.getReceivedMessageList(MessageCivilian.class);
+        logger.debug("收到消防队消息");
         for (CommunicationMessage msg : messages) {
             MessageCivilian civilianMsg = (MessageCivilian) msg;
             EntityID civilianID = civilianMsg.getAgentID();
@@ -186,7 +187,7 @@ public class SampleHumanDetector extends HumanDetector {
                     // 避免重复添加
                     if (!rescuedCivilians.contains(civilianID)) {
                         rescuedCivilians.add(civilianID);
-                        logger.info("收到消防队救援消息，市民 " + civilianID + " 已获救，需要搬运");
+                        logger.debug("收到消防队救援消息，市民 " + civilianID + " 已获救，需要搬运");
                     }
                 }
             }

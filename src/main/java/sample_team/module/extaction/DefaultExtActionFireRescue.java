@@ -22,6 +22,9 @@ import rescuecore2.standard.entities.FireBrigade;
 import rescuecore2.standard.entities.Human;
 import rescuecore2.standard.entities.StandardEntity;
 import rescuecore2.worldmodel.EntityID;
+// import org.apache.logging.log4j.Logger;
+import adf.core.debug.DefaultLogger; // 新增import
+import org.apache.log4j.Logger;
 
 import adf.core.agent.communication.MessageManager; // 新增import
 import adf.core.agent.communication.standard.bundle.StandardMessagePriority;
@@ -35,6 +38,7 @@ public class DefaultExtActionFireRescue extends ExtAction {
 
   private int thresholdRest;
   private int kernelTime;
+  private Logger logger;
 
   private EntityID target;
 
@@ -145,7 +149,8 @@ public class DefaultExtActionFireRescue extends ExtAction {
                         MessageCivilian msg = new MessageCivilian(true, StandardMessagePriority.HIGH, (Civilian) human);
                         messageManager.addMessage(msg);
                         // 日志记录
-                        adf.core.debug.DefaultLogger.getLogger(agentInfo.me()).info("消防员发送市民救援消息: " + human.getID() + " 掩埋度已降为0");
+                        // adf.core.debug.DefaultLogger.getLogger(agentInfo.me()).info("消防员发送市民救援消息: " + human.getID() + " 掩埋度已降为0");
+                        logger.debug("消防员发送市民救援消息: " + human.getID() + " 掩埋度已降为0");
                     }
                     lastRescuedCivilian = null; // 重置
                 }
