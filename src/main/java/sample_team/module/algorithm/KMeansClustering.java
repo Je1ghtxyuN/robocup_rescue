@@ -651,47 +651,4 @@ public class KMeansClustering extends StaticClustering {
   private boolean isGoal(EntityID e, Collection<EntityID> test) {
     return test.contains(e);
   }
-
-
-
-
-
-
-
-
-
-  // ====================== 新增的 getter 方法 ======================
-    /**
-     * 获取聚类中心的 EntityID
-     * @param index 聚类索引
-     * @return 聚类中心的 EntityID
-     */
-    public EntityID getClusterCenterID(int index) {
-        if (index >= 0 && index < this.centerIDs.size()) {
-            return this.centerIDs.get(index);
-        }
-        return null;
-    }
-
-    /**
-     * 获取聚类中心对应的实体
-     * @param index 聚类索引
-     * @return 聚类中心实体
-     */
-    public StandardEntity getClusterCenterEntity(int index) {
-        if (index >= 0 && index < this.centerList.size()) {
-            return this.centerList.get(index);
-        }
-        return null;
-    }
-    
-    /**
-     * 获取所有聚类中心的 ID 列表
-     * @return 聚类中心 ID 列表
-     */
-    public List<EntityID> getAllClusterCenterIDs() {
-        return new ArrayList<>(this.centerIDs);
-    }
-
-    // ====================== 已有代码保持不变 ======================
 }

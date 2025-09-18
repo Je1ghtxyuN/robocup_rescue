@@ -15,7 +15,6 @@ import rescuecore2.worldmodel.EntityID;
 import rescuecore2.worldmodel.Entity;
 import adf.core.debug.DefaultLogger;
 
-
 import java.util.*;
 import java.util.stream.Collectors;
 import java.awt.geom.Line2D;
@@ -23,6 +22,22 @@ import java.awt.geom.Area;
 import java.awt.Shape;
 
 public class SampleRoadDetector extends RoadDetector {
+
+    // 属性最大值常量
+    private static final int MAX_HP = 10000;
+    private static final int MAX_DAMAGE = 200;
+    private static final int MAX_BURIEDNESS = 100;
+
+    // 可调节的阈值参数
+    private static final int MIN_HP_THRESHOLD = 1000;
+    private static final int MIN_DAMAGE_THRESHOLD = 50;
+    private static final int MIN_BURIEDNESS_THRESHOLD = 30;
+
+    // 权重配置
+    private static final double DISTANCE_WEIGHT = 0.5;
+    private static final double HP_WEIGHT = 0.2;
+    private static final double BURIEDNESS_WEIGHT = 0.15;
+    private static final double DAMAGE_WEIGHT = 0.15;
 
     // 新增字段：当前锁定的目标及锁定时间
     private EntityID lockedTarget = null;
@@ -53,6 +68,20 @@ public class SampleRoadDetector extends RoadDetector {
     private static final Map<EntityID, Integer> processedHelpRequests = new HashMap<>();
     private static final int PROCESSED_COOLDOWN = 15; // 处理冷却时间
 
+    // 新增：记录已接触过的伤员
+    private Set<EntityID> contactedHumans = new HashSet<>();
+    // 新增：当前目标伤员
+    private EntityID currentTargetHuman = null;
+    
+    // 新增：防止警察聚集的共享状态
+    private static final Map<EntityID, EntityID> reservedTargets = new HashMap<>();
+    private static final Map<EntityID, Integer> reservationTimes = new HashMap<>();
+    private static final int RESERVATION_TIMEOUT = 30; // 30时间单位后保留失效
+    
+    // 新增：避难所入口卡住求助相关字段
+    private static final Map<EntityID, Integer> refugeEntranceRequests = new HashMap<>();
+    private static final int REFUGE_ENTRANCE_REQUEST_COOLDOWN = 20;
+
     public SampleRoadDetector(AgentInfo ai, WorldInfo wi, ScenarioInfo si,
                             ModuleManager moduleManager, DevelopData developData) {
         super(ai, wi, si, moduleManager, developData);
@@ -82,8 +111,33 @@ public class SampleRoadDetector extends RoadDetector {
         // 处理来自救护队的道路求助消息
         processRoadHelpRequests(messageManager);
         
+        // 新增：处理来自救护队的避难所入口卡住求助
+        processRefugeEntranceHelpRequests(messageManager);
+        
         // 清理过期的处理记录
         cleanupOldProcessedRequests();
+        
+        // 清理过期的避难所入口求助
+        cleanupOldRefugeEntranceRequests();
+        
+        // 检查是否接触到了当前目标伤员
+        if (currentTargetHuman != null) {
+            StandardEntity entity = worldInfo.getEntity(currentTargetHuman);
+            if (entity instanceof Human) {
+                Human human = (Human) entity;
+                
+                // 检查是否在伤员所在的位置
+                if (agentInfo.getPosition().equals(human.getPosition())) {
+                    contactedHumans.add(currentTargetHuman);
+                    // 释放目标保留
+                    releaseReservedTarget(currentTargetHuman);
+                    currentTargetHuman = null; // 清除当前目标
+                }
+            }
+        }
+        
+        // 清理过期的目标保留
+        cleanupExpiredReservations();
         
         return this;
     }
@@ -95,6 +149,15 @@ public class SampleRoadDetector extends RoadDetector {
         int currentTime = agentInfo.getTime();
         processedHelpRequests.entrySet().removeIf(entry -> 
             currentTime - entry.getValue() > PROCESSED_COOLDOWN);
+    }
+    
+    /**
+     * 清理过期的避难所入口求助
+     */
+    private void cleanupOldRefugeEntranceRequests() {
+        int currentTime = agentInfo.getTime();
+        refugeEntranceRequests.entrySet().removeIf(entry -> 
+            currentTime - entry.getValue() > REFUGE_ENTRANCE_REQUEST_COOLDOWN);
     }
     
     /**
@@ -132,6 +195,48 @@ public class SampleRoadDetector extends RoadDetector {
         }
     }
     
+    /**
+     * 新增：处理来自救护队的避难所入口卡住求助
+     */
+    private void processRefugeEntranceHelpRequests(MessageManager messageManager) {
+        // 获取收到的道路消息
+        List<CommunicationMessage> roadMessages = 
+            messageManager.getReceivedMessageList(MessageRoad.class);
+        
+        for (CommunicationMessage msg : roadMessages) {
+            MessageRoad roadMsg = (MessageRoad) msg;
+            
+            // 检查是否是避难所入口卡住求助（障碍物为null，不可通行）
+            if (!roadMsg.isBlockadeDefined() && 
+                roadMsg.isPassable() != null && 
+                !roadMsg.isPassable()) {
+                
+                // 使用反射检查自定义字段
+                try {
+                    java.lang.reflect.Field customField = roadMsg.getClass().getDeclaredField("custom");
+                    customField.setAccessible(true);
+                    String customValue = (String) customField.get(roadMsg);
+                    
+                    if ("refuge_entrance_stuck".equals(customValue)) {
+                        EntityID roadID = roadMsg.getRoadID();
+                        
+                        // 检查是否已被其他警察处理
+                        if (refugeEntranceRequests.containsKey(roadID)) {
+                            DefaultLogger.getLogger(agentInfo.me()).debug("忽略已处理的避难所入口求助: " + roadID);
+                            continue;
+                        }
+                        
+                        // 记录求助信息
+                        refugeEntranceRequests.put(roadID, agentInfo.getTime());
+                        DefaultLogger.getLogger(agentInfo.me()).info("警察收到避难所入口卡住求助: 位置 " + roadID);
+                    }
+                } catch (Exception e) {
+                    DefaultLogger.getLogger(agentInfo.me()).error("处理避难所入口求助时出错", e);
+                }
+            }
+        }
+    }
+    
      // 新增目标状态检查方法
     private boolean isTargetCleared(EntityID targetID) {
         StandardEntity entity = worldInfo.getEntity(targetID);
@@ -147,6 +252,21 @@ public class SampleRoadDetector extends RoadDetector {
         // 优先处理已锁定的目标
         if (lockedTarget != null && !isTargetCleared(lockedTarget)) {
             this.result = lockedTarget;
+            return this;
+        }
+        
+        // 新增：最优先处理市民救援
+        EntityID civilianTarget = findCivilianTarget();
+        if (civilianTarget != null) {
+            this.result = civilianTarget;
+            return this;
+        }
+        
+        // 新增：优先处理避难所入口卡住求助
+        EntityID refugeEntranceTarget = selectRefugeEntranceHelpTarget();
+        if (refugeEntranceTarget != null) {
+            this.result = refugeEntranceTarget;
+            DefaultLogger.getLogger(agentInfo.me()).info("警察优先处理避难所入口卡住求助，目标位置: " + refugeEntranceTarget);
             return this;
         }
         
@@ -208,6 +328,112 @@ public class SampleRoadDetector extends RoadDetector {
         }
         
         return this;
+    }
+
+    /**
+     * 新增：选择最近的避难所入口求助目标
+     */
+    private EntityID selectRefugeEntranceHelpTarget() {
+        if (refugeEntranceRequests.isEmpty()) {
+            return null;
+        }
+        
+        EntityID currentPosition = agentInfo.getPosition();
+        EntityID nearestRefugeEntrance = null;
+        int minDistance = Integer.MAX_VALUE;
+        
+        for (EntityID requestLocation : refugeEntranceRequests.keySet()) {
+            int distance = worldInfo.getDistance(currentPosition, requestLocation);
+            if (distance < minDistance) {
+                minDistance = distance;
+                nearestRefugeEntrance = requestLocation;
+            }
+        }
+        
+        return nearestRefugeEntrance;
+    }
+
+    // 新增：寻找市民目标（最高优先级）
+    private EntityID findCivilianTarget() {
+        // 1. 获取所有可见人类实体
+        List<Human> rescueTargets = filterRescueTargets(
+            worldInfo.getEntitiesOfType(StandardEntityURN.CIVILIAN));
+        
+        // 2. 过滤在集群内的目标
+        List<Human> rescueTargetsInCluster = filterInCluster(rescueTargets);
+        List<Human> targets = rescueTargetsInCluster.isEmpty() ? rescueTargets : rescueTargetsInCluster;
+
+        // 3. 如果没有目标，返回null
+        if (targets.isEmpty()) {
+            return null;
+        }
+
+        // 4. 使用加权评分系统选择最佳目标
+        targets.sort(new WeightedPrioritySorter(worldInfo, agentInfo.me()));
+        
+        // 5. 从高优先级目标中选取第一个未接触过且未被其他警察保留的目标
+        for (Human human : targets) {
+            EntityID humanId = human.getID();
+            if (!contactedHumans.contains(humanId) && !isReservedByOtherPolice(humanId)) {
+                // 保留这个目标
+                reserveTarget(humanId);
+                this.currentTargetHuman = humanId; // 设置当前目标伤员
+                return human.getPosition(); // 返回市民所在位置
+            }
+        }
+        
+        // 6. 如果所有目标都已接触过或被保留，选择优先级最高的可用目标
+        for (Human human : targets) {
+            EntityID humanId = human.getID();
+            if (!isReservedByOtherPolice(humanId)) {
+                reserveTarget(humanId);
+                this.currentTargetHuman = humanId;
+                return human.getPosition();
+            }
+        }
+        
+        return null;
+    }
+
+    // 新增：检查目标是否被其他警察保留
+    private boolean isReservedByOtherPolice(EntityID humanId) {
+        EntityID reservingPolice = reservedTargets.get(humanId);
+        return reservingPolice != null && 
+               !reservingPolice.equals(agentInfo.getID()) && 
+               !isReservationExpired(humanId);
+    }
+
+    // 新增：保留目标
+    private void reserveTarget(EntityID humanId) {
+        reservedTargets.put(humanId, agentInfo.getID());
+        reservationTimes.put(humanId, currentTime);
+    }
+
+    // 新增：释放目标保留
+    private void releaseReservedTarget(EntityID humanId) {
+        if (agentInfo.getID().equals(reservedTargets.get(humanId))) {
+            reservedTargets.remove(humanId);
+            reservationTimes.remove(humanId);
+        }
+    }
+
+    // 新增：检查保留是否过期
+    private boolean isReservationExpired(EntityID humanId) {
+        Integer reservationTime = reservationTimes.get(humanId);
+        if (reservationTime == null) return true;
+        return (currentTime - reservationTime) > RESERVATION_TIMEOUT;
+    }
+
+    // 新增：清理过期的目标保留
+    private void cleanupExpiredReservations() {
+        Iterator<Map.Entry<EntityID, Integer>> it = reservationTimes.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<EntityID, Integer> entry = it.next();
+            if (currentTime - entry.getValue() > RESERVATION_TIMEOUT) {
+                reservedTargets.remove(entry.getKey());
+                it.remove();
+            }
+        }
     }
 
     /**
@@ -311,11 +537,6 @@ public class SampleRoadDetector extends RoadDetector {
            mainRoadFactor * coordinationFactor * emergencyServiceFactor;
            
     }
-    
-    
-
-   
-
 
     private boolean isValidBlockade(Blockade blockade) {
         // 基础有效性检查
@@ -492,17 +713,6 @@ public class SampleRoadDetector extends RoadDetector {
         return blockadeArea.intersects(edgeLine.getBounds2D());
     }
 
-
-
-
-
-
-
-
-
-
-
-
         public boolean isBlockingRefuge(Blockade blockade) {
         if (blockade == null || !blockade.isPositionDefined()) {
             return false; // 障碍物无效或位置未定义，直接返回false
@@ -535,13 +745,6 @@ public class SampleRoadDetector extends RoadDetector {
         }
         return false; // 未找到匹配，障碍物不影响避难所
     }
-
-
-
-
-
-
-
 
    // 新增主干道判断方法
     private boolean isOnMainRoad(Blockade blockade) {
@@ -654,10 +857,152 @@ private Map<EntityID, EntityID> getAmbulancePositions() {
         if (distance >= 0 && distance <= EMERGENCY_SERVICE_RANGE) {
             // 救护队员的优先级比消防员更高
             double proximityFactor = 1.0 + (1.0 - (distance / (double)EMERGENCY_SERVICE_RANGE));
-            emergencyFactor = Math.max(emergencyFactor, (BASE_EMERGENCY_FACTOR + 1.0) * proximityFactor);
+            emergencyFactor = Math.max(emergencyFactor, (
+
+
+BASE_EMERGENCY_FACTOR + 1.0) * proximityFactor);
         }
     }
     
     return emergencyFactor;
+    }
+
+    // 获取与紧急服务相关的障碍物
+    private List<Blockade> getEmergencyServiceBlockades(List<Blockade> allBlockades) {
+        List<Blockade> emergencyBlockades = new ArrayList<>();
+        
+        // 获取所有紧急服务位置
+        Map<EntityID, EntityID> firePositions = getFireBrigadePositions();
+        Map<EntityID, EntityID> ambulancePositions = getAmbulancePositions();
+        
+        // 合并所有紧急服务位置
+        Set<EntityID> allEmergencyPositions = new HashSet<>();
+        allEmergencyPositions.addAll(firePositions.values());
+        allEmergencyPositions.addAll(ambulancePositions.values());
+        
+        // 查找这些位置附近的障碍物
+        for (EntityID emergencyPos : allEmergencyPositions) {
+            for (Blockade blockade : allBlockades) {
+                int distance = worldInfo.getDistance(emergencyPos, blockade.getPosition());
+                if (distance >= 0 && distance <= EMERGENCY_SERVICE_RANGE) {
+                    emergencyBlockades.add(blockade);
+                }
+            }
+        }
+        
+        return emergencyBlockades;
+    }
+
+    // 从第一个文件移植的人员过滤逻辑
+    private List<Human> filterRescueTargets(Collection<? extends StandardEntity> list) {
+        List<Human> rescueTargets = new ArrayList<>();
+        for (StandardEntity next : list) {
+            if (!(next instanceof Human)) continue;
+            Human h = (Human) next;
+            if (!isValidHuman(h)) continue;
+            rescueTargets.add(h);
+        }
+        return rescueTargets;
+    }
+
+    private List<Human> filterInCluster(Collection<? extends StandardEntity> entities) {
+        int clusterIndex = clustering.getClusterIndex(this.agentInfo.getID());
+        List<Human> filter = new ArrayList<>();
+        HashSet<StandardEntity> inCluster = new HashSet<>(
+                clustering.getClusterEntities(clusterIndex));
+        for (StandardEntity next : entities) {
+            if (!(next instanceof Human)) continue;
+            Human h = (Human) next;
+            if (!h.isPositionDefined()) continue;
+            StandardEntity position = this.worldInfo.getPosition(h);
+            if (position == null) continue;
+            if (!inCluster.contains(position)) continue;
+            filter.add(h);
+        }
+        return filter;
+    }
+
+    private boolean isValidHuman(StandardEntity entity) {
+        if (entity == null) return false;
+        if (!(entity instanceof Human)) return false;
+
+        Human target = (Human) entity;
+        if (!target.isHPDefined() || target.getHP() == 0) return false;
+        if (!target.isPositionDefined()) return false;
+        if (!target.isDamageDefined()) return false;
+        if (!target.isBuriednessDefined()) return false;
+
+        // 综合属性检查
+        if (target.getDamage() < MIN_DAMAGE_THRESHOLD && 
+            target.getHP() < MIN_HP_THRESHOLD && 
+            target.getBuriedness() > MIN_BURIEDNESS_THRESHOLD) {
+            return false;
+        }
+
+        if (target.getBuriedness() == 0) return false;
+
+        StandardEntity position = worldInfo.getPosition(target);
+        if (position == null) return false;
+
+        StandardEntityURN positionURN = position.getStandardURN();
+        if (positionURN == StandardEntityURN.REFUGE || 
+            positionURN == StandardEntityURN.AMBULANCE_TEAM) {
+            return false;
+        }
+
+        return true;
+    }
+
+    // 从第一个文件移植的加权优先级排序器
+    private class WeightedPrioritySorter implements Comparator<StandardEntity> {
+        private StandardEntity reference;
+        private WorldInfo worldInfo;
+
+        WeightedPrioritySorter(WorldInfo wi, StandardEntity reference) {
+            this.reference = reference;
+            this.worldInfo = wi;
+        }
+
+        @Override
+        public int compare(StandardEntity a, StandardEntity b) {
+            double scoreA = calculatePriorityScore((Human) a);
+            double scoreB = calculatePriorityScore((Human) b);
+            return Double.compare(scoreB, scoreA); // 降序排列
+        }
+
+        private double calculatePriorityScore(Human human) {
+            double distanceScore = calculateDistanceScore(human);
+            double hpScore = calculateHpScore(human);
+            double buriednessScore = calculateBuriednessScore(human);
+            double damageScore = calculateDamageScore(human);
+
+            return (distanceScore * DISTANCE_WEIGHT) +
+                   (hpScore * HP_WEIGHT) +
+                   (buriednessScore * BURIEDNESS_WEIGHT) +
+                   (damageScore * DAMAGE_WEIGHT);
+        }
+
+        private double calculateDistanceScore(Human human) {
+            int distance = this.worldInfo.getDistance(this.reference, human);
+            return Math.exp(-distance / 50000.0);
+        }
+
+        private double calculateHpScore(Human human) {
+            if (!human.isHPDefined()) return 0;
+            int hp = human.getHP();
+            return 1.0 - (hp / (double) MAX_HP);
+        }
+
+        private double calculateBuriednessScore(Human human) {
+            if (!human.isBuriednessDefined()) return 0;
+            int buriedness = human.getBuriedness();
+            return buriedness / (double) MAX_BURIEDNESS;
+        }
+
+        private double calculateDamageScore(Human human) {
+            if (!human.isDamageDefined()) return 0;
+            int damage = human.getDamage();
+            return damage / (double) MAX_DAMAGE;
+        }
     }
 }
