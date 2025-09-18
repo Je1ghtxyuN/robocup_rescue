@@ -11,6 +11,7 @@ import adf.core.agent.info.AgentInfo;
 import adf.core.agent.info.ScenarioInfo;
 import adf.core.agent.info.WorldInfo;
 import adf.core.agent.module.ModuleManager;
+import adf.core.component.communication.CommunicationMessage;
 import adf.core.component.module.algorithm.Clustering;
 import adf.core.component.module.complex.HumanDetector;
 import adf.core.debug.DefaultLogger;
@@ -34,6 +35,11 @@ import rescuecore2.worldmodel.EntityID;
 import java.awt.geom.Line2D;
 import java.awt.geom.Area;
 import java.awt.Shape;
+
+import adf.core.agent.communication.standard.bundle.information.MessageCivilian; // 新增import
+import java.util.LinkedList; // 新增import
+import java.util.Queue; // 新增import
+
 
 public class SampleHumanDetector extends HumanDetector {
 
@@ -63,6 +69,10 @@ public class SampleHumanDetector extends HumanDetector {
     private int refugeEntranceStuckCount = 0;
     private static final int REFUGE_ENTRANCE_STUCK_THRESHOLD = 3;
 
+    // 新增字段：存储需要搬运的市民队列
+    private Queue<EntityID> rescuedCivilians = new LinkedList<>();
+
+
     public SampleHumanDetector(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager, DevelopData developData) {
         super(ai, wi, si, moduleManager, developData);
         logger = DefaultLogger.getLogger(agentInfo.me());
@@ -79,6 +89,9 @@ public class SampleHumanDetector extends HumanDetector {
         checkStuckAndRequestHelp(messageManager);
         // 新增：检查是否在避难所入口卡住
         checkRefugeEntranceStuck(messageManager);
+
+        // 新增：处理来自消防队的市民消息
+        processFireRescueMessages(messageManager);
         return this;
     }
 
@@ -285,6 +298,31 @@ public class SampleHumanDetector extends HumanDetector {
         return false;
     }
 
+    /**
+     * 处理来自消防队的市民消息
+     */
+    private void processFireRescueMessages(MessageManager messageManager) {
+        // 获取收到的MessageCivilian消息
+        List<CommunicationMessage> messages = messageManager.getReceivedMessageList(MessageCivilian.class);
+        for (CommunicationMessage msg : messages) {
+            MessageCivilian civilianMsg = (MessageCivilian) msg;
+            EntityID civilianID = civilianMsg.getAgentID();
+            StandardEntity entity = worldInfo.getEntity(civilianID);
+            if (entity instanceof Human) {
+                Human human = (Human) entity;
+                // 检查市民是否有效且掩埋度为0
+                if (isValidHuman(human) && human.isBuriednessDefined() && human.getBuriedness() == 0) {
+                    // 避免重复添加
+                    if (!rescuedCivilians.contains(civilianID)) {
+                        rescuedCivilians.add(civilianID);
+                        logger.info("收到消防队救援消息，市民 " + civilianID + " 已获救，需要搬运");
+                    }
+                }
+            }
+        }
+    }
+
+
     @Override
     public HumanDetector calc() {
         Human transportHuman = this.agentInfo.someoneOnBoard();
@@ -300,6 +338,21 @@ public class SampleHumanDetector extends HumanDetector {
                 this.result = null;
             }
         }
+
+        // 优先处理来自消防队消息的市民
+        if (this.result == null && !rescuedCivilians.isEmpty()) {
+            EntityID nextCivilian = rescuedCivilians.poll();
+            // 再次检查市民是否有效
+            StandardEntity entity = worldInfo.getEntity(nextCivilian);
+            if (entity instanceof Human) {
+                Human human = (Human) entity;
+                if (isValidHuman(human) && human.isBuriednessDefined() && human.getBuriedness() == 0) {
+                    this.result = nextCivilian;
+                    logger.debug("选择来自消防队消息的市民: " + nextCivilian);
+                }
+            }
+        }
+
         if (this.result == null) {
             this.result = calcTarget();
         }
