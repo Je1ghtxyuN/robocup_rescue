@@ -25,8 +25,10 @@ public class SampleRoadDetector extends RoadDetector {
 
     private SampleSearch sampleSearch;
 
-    // 添加字段存储高优先级障碍物
-    private Set<EntityID> highPriorityBlockades = new HashSet<>();
+    // 在类变量部分添加以下字段
+    private static final int INITIAL_PHASE_DURATION = 30; // 开局阶段持续时间（秒）
+    private EntityID initialRefugeTarget = null; // 初始分配的避难所目标
+    private boolean initialTaskCompleted = false; // 初始任务是否完成
 
 
     // 属性最大值常量
@@ -61,9 +63,8 @@ public class SampleRoadDetector extends RoadDetector {
  
     // 因子权重参数
     private static final double BASE_VISIBILITY_FACTOR = 1.5;//可见性
-    private static final double BASE_REFUGE_FACTOR = 4.0;//避难所
     private static final double BASE_ENTRANCE_FACTOR = 3.0;//门
-    private static final double BASE_MAIN_ROAD_FACTOR = 3.0;//主干道
+    private static final double BASE_MAIN_ROAD_FACTOR = 2.0;//主干道
     private static final double BASE_COORDINATION_FACTOR = 0.3;
 
     // 求助请求列表
@@ -111,6 +112,15 @@ public class SampleRoadDetector extends RoadDetector {
         }
         super.updateInfo(messageManager);
         this.currentTime = agentInfo.getTime();
+
+        // 检查初始任务是否完成
+        if (initialRefugeTarget != null && !initialTaskCompleted) {
+            // 如果当前位置就是分配的避难所，标记任务完成
+            if (agentInfo.getPosition().equals(initialRefugeTarget)) {
+                initialTaskCompleted = true;
+                DefaultLogger.getLogger(agentInfo.me()).info("警察已完成初始避难所清理任务: " + initialRefugeTarget);
+            }
+        }
         
         // 处理来自救护队的道路求助消息
         processRoadHelpRequests(messageManager);
@@ -136,60 +146,10 @@ public class SampleRoadDetector extends RoadDetector {
         
         // 清理过期的目标保留
         cleanupExpiredReservations();
-
-        // 更新高优先障碍物
-        updateHighPriorityBlockades();
         
         return this;
     }
 
-    private void updateHighPriorityBlockades() {
-        highPriorityBlockades.clear();
-        Collection<StandardEntity> refuges = worldInfo.getEntitiesOfType(StandardEntityURN.REFUGE);
-        for (StandardEntity refugeEntity : refuges) {
-            Refuge refuge = (Refuge) refugeEntity;
-            // 找出所有通往避难所的道路上的障碍物
-            findBlockadesOnPathToRefuge(refuge.getID(), highPriorityBlockades);
-        }
-    }
-
-    // 使用BFS从避难所出发，查找所有道路上的障碍物
-    private void findBlockadesOnPathToRefuge(EntityID refugeID, Set<EntityID> blockades) {
-        Set<EntityID> visited = new HashSet<>();
-        Queue<EntityID> queue = new LinkedList<>();
-        queue.add(refugeID);
-        visited.add(refugeID);
-        int maxDepth = 5;
-        int depth = 0;
-        
-        while (!queue.isEmpty() && depth <= maxDepth) {
-            int size = queue.size();
-            for (int i = 0; i < size; i++) {
-                EntityID currentID = queue.poll();
-                StandardEntity currentEntity = worldInfo.getEntity(currentID);
-                if (currentEntity instanceof rescuecore2.standard.entities.Area) {
-                    rescuecore2.standard.entities.Area area = (rescuecore2.standard.entities.Area) currentEntity;
-                    // 检查当前区域是否有障碍物
-                    if (area.isBlockadesDefined()) {
-                        for (EntityID blockadeID : area.getBlockades()) {
-                            blockades.add(blockadeID);
-                        }
-                    }
-                    // 添加邻居
-                    List<EntityID> neighbours = area.getNeighbours();
-                    for (EntityID neighbourID : neighbours) {
-                        if (!visited.contains(neighbourID)) {
-                            visited.add(neighbourID);
-                            queue.add(neighbourID);
-                        }
-                    }
-                }
-            }
-            depth++;
-        }
-    }
-
-    
     // 清理过期的处理记录
     private void cleanupOldProcessedRequests() {
         int currentTime = agentInfo.getTime();
@@ -242,9 +202,31 @@ public class SampleRoadDetector extends RoadDetector {
 
     @Override
     public SampleRoadDetector calc() {
+
+        // 开局阶段逻辑 - 优先处理分配的避难所
+        if (agentInfo.getTime() < INITIAL_PHASE_DURATION && !initialTaskCompleted) {
+            // 如果还没有分配初始避难所，尝试分配一个
+            if (initialRefugeTarget == null) {
+                initialRefugeTarget = assignInitialRefuge();
+            }
+            
+            // 如果有分配的避难所，优先前往
+            if (initialRefugeTarget != null) {
+                this.result = initialRefugeTarget;
+                return this;
+            }
+        }
+
         // 优先处理已锁定的目标
         if (lockedTarget != null && !isTargetCleared(lockedTarget)) {
             this.result = lockedTarget;
+            return this;
+        }
+
+        // 优先处理市民救援
+        EntityID civilianTarget = findCivilianTarget();
+        if (civilianTarget != null) {
+            this.result = civilianTarget;
             return this;
         }
 
@@ -259,24 +241,7 @@ public class SampleRoadDetector extends RoadDetector {
                 DefaultLogger.getLogger(agentInfo.me()).info("警察优先处理求助请求，目标位置: " + helpTarget);
                 return this;
             }
-        }
-        
-        // 优先处理市民救援
-        EntityID civilianTarget = findCivilianTarget();
-        if (civilianTarget != null) {
-            this.result = civilianTarget;
-            return this;
-        }
-        
-        // 在普通障碍物处理前，先检查高优先级集合
-        if (!highPriorityBlockades.isEmpty()) {
-            // 选择最近的高优先级障碍物
-            EntityID target = selectNearestHighPriorityBlockade(agentInfo.getPosition());
-            if (target != null) {
-                this.result = target;
-                return this;
-            }
-        }
+        }   
         
         EntityID position = agentInfo.getPosition();
         result = null;
@@ -325,35 +290,26 @@ public class SampleRoadDetector extends RoadDetector {
         return this;
     }
 
-    // 选择最近的高优先级障碍物
-    private EntityID selectNearestHighPriorityBlockade(EntityID policePosition) {
-        if (highPriorityBlockades.isEmpty()) {
-            return null;
+    // 添加分配初始避难所的方法
+    private EntityID assignInitialRefuge() {
+        // 获取所有避难所
+        Collection<StandardEntity> refuges = worldInfo.getEntitiesOfType(StandardEntityURN.REFUGE);
+        
+        // 使用警察ID的哈希值来选择避难所，确保分配的一致性
+        int policeIdHash = agentInfo.getID().getValue();
+        int refugeIndex = policeIdHash % refuges.size();
+        
+        // 选择对应的避难所
+        int i = 0;
+        for (StandardEntity refuge : refuges) {
+            if (i == refugeIndex) {
+                DefaultLogger.getLogger(agentInfo.me()).info("警察被分配到避难所: " + refuge.getID());
+                return refuge.getID();
+            }
+            i++;
         }
         
-        EntityID nearestBlockade = null;
-        int minDistance = Integer.MAX_VALUE;
-        
-        for (EntityID blockadeID : highPriorityBlockades) {
-            // 获取障碍物实体
-            StandardEntity blockadeEntity = worldInfo.getEntity(blockadeID);
-            if (!(blockadeEntity instanceof Blockade)) {
-                continue;
-            }
-            
-            Blockade blockade = (Blockade) blockadeEntity;
-            // 获取障碍物所在的道路位置
-            EntityID blockadePosition = blockade.getPosition();
-            
-            // 计算警察到障碍物位置的距离
-            int distance = worldInfo.getDistance(policePosition, blockadePosition);
-            if (distance < minDistance) {
-                minDistance = distance;
-                nearestBlockade = blockadePosition; // 返回障碍物所在的道路ID
-            }
-        }
-        
-        return nearestBlockade;
+        return null;
     }
 
     // 寻找市民目标
@@ -518,13 +474,9 @@ public class SampleRoadDetector extends RoadDetector {
         }
     }
 
-
     private double calculatePriority(EntityID position, Blockade blockade) { 
         // 可见性因子（当前视野内优先级更高）
         double visibilityFactor = (visibleRoads.contains(blockade.getPosition())) ? BASE_VISIBILITY_FACTOR : 1.0;
-
-        // 避难所阻挡因子（新增）: 如果障碍物阻挡避难所，则赋予更高权重
-        double refugeFactor = isBlockingRefuge(blockade) ? BASE_REFUGE_FACTOR : 1.0;
 
         // 入口因子（在建筑物入口处优先级更高）
         double entranceFactor = isAtBuildingEntrance(blockade) ? BASE_ENTRANCE_FACTOR : 1.0;
@@ -540,8 +492,7 @@ public class SampleRoadDetector extends RoadDetector {
             coordinationFactor = BASE_COORDINATION_FACTOR; // 被锁定的目标优先级降低
         }
         
-        return visibilityFactor * entranceFactor * refugeFactor * 
-           mainRoadFactor * coordinationFactor;
+        return visibilityFactor * entranceFactor * mainRoadFactor * coordinationFactor;
            
     }
 
@@ -715,39 +666,6 @@ public class SampleRoadDetector extends RoadDetector {
         
         // 检测多边形是否与线段相交
         return blockadeArea.intersects(edgeLine.getBounds2D());
-    }
-
-        public boolean isBlockingRefuge(Blockade blockade) {
-        if (blockade == null || !blockade.isPositionDefined()) {
-            return false; // 障碍物无效或位置未定义，直接返回false
-        }
-        
-        EntityID blockPos = blockade.getPosition(); // 获取障碍物所在的区域ID
-        if (blockPos == null) {
-            return false;
-        }
-        
-        // 获取所有避难所实体
-        Collection<StandardEntity> refuges = worldInfo.getEntitiesOfType(StandardEntityURN.REFUGE);
-        for (StandardEntity entity : refuges) {
-            if (!(entity instanceof rescuecore2.standard.entities.Area)) {
-                continue; // 跳过非Area实体（理论上不会发生，但安全处理）
-            }
-            rescuecore2.standard.entities.Area refuge = (rescuecore2.standard.entities.Area) entity; // 避难所是Area的子类
-            
-            // 情况1：障碍物直接位于避难所上
-            if (refuge.getID().equals(blockPos)) {
-                return true;
-            }
-            
-            // 情况2：障碍物位于避难所的直接邻居区域上
-            // 获取避难所的可通行邻居列表（通过getNeighbours()，基于可通行边缘）
-            List<EntityID> neighbours = refuge.getNeighbours();
-            if (neighbours != null && neighbours.contains(blockPos)) {
-                return true;
-            }
-        }
-        return false; // 未找到匹配，障碍物不影响避难所
     }
 
    // 新增主干道判断方法
