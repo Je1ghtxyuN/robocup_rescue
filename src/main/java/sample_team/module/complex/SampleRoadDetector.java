@@ -10,6 +10,7 @@ import adf.core.agent.module.ModuleManager;
 import adf.core.component.module.algorithm.Clustering;
 import adf.core.component.module.complex.RoadDetector;
 import adf.core.component.communication.CommunicationMessage;
+import org.apache.log4j.Logger;
 import rescuecore2.standard.entities.*;
 import rescuecore2.worldmodel.EntityID;
 import rescuecore2.worldmodel.Entity;
@@ -22,6 +23,8 @@ import java.awt.geom.Area;
 import java.awt.Shape;
 
 public class SampleRoadDetector extends RoadDetector {
+    private Logger logger;
+    
     // 全局市民状态跟踪器
     private static final Map<EntityID, CivilianStatus> GLOBAL_CIVILIAN_STATUS = new HashMap<>();
     private static final Object STATUS_LOCK = new Object();
@@ -96,6 +99,7 @@ public class SampleRoadDetector extends RoadDetector {
     public SampleRoadDetector(AgentInfo ai, WorldInfo wi, ScenarioInfo si,
                             ModuleManager moduleManager, DevelopData developData) {
         super(ai, wi, si, moduleManager, developData);
+        logger = DefaultLogger.getLogger(agentInfo.me());
         this.clustering = moduleManager.getModule(
             "SampleRoadDetector.Clustering",
             "sample_team.module.algorithm.KMeansClustering");   
@@ -232,9 +236,10 @@ public class SampleRoadDetector extends RoadDetector {
         EntityID civilianTarget = findCivilianTarget();
         if (civilianTarget != null) {
             this.result = civilianTarget;
+            logger.debug("搜救人类");
             return this;
         }
-
+        
         // 优先处理求助请求
         if (!helpRequests.isEmpty()) {
             EntityID helpTarget = selectHelpTarget();
@@ -247,7 +252,7 @@ public class SampleRoadDetector extends RoadDetector {
                 return this;
             }
         }   
-        
+
         EntityID position = agentInfo.getPosition();
         result = null;
         visibleRoads.clear();
@@ -449,7 +454,7 @@ public class SampleRoadDetector extends RoadDetector {
         // 主干道因子: 如果障碍物在主干道上，优先级更高
         double mainRoadFactor = isOnMainRoad(blockade) ? BASE_MAIN_ROAD_FACTOR : 1.0;
 
-       // 新增协调因子：已被其他警察锁定的目标降级
+        // 新增协调因子：已被其他警察锁定的目标降级
         double coordinationFactor = 1.0;
         EntityID roadID = blockade.getPosition();
         if (globalTargetLocks.containsKey(roadID) && 

@@ -36,10 +36,9 @@ import java.awt.geom.Line2D;
 import java.awt.geom.Area;
 import java.awt.Shape;
 
-import adf.core.agent.communication.standard.bundle.information.MessageCivilian; // 新增import
-import java.util.LinkedList; // 新增import
-import java.util.Queue; // 新增import
-
+import adf.core.agent.communication.standard.bundle.information.MessageCivilian;
+import java.util.LinkedList; 
+import java.util.Queue; 
 
 public class SampleHumanDetector extends HumanDetector {
 
@@ -83,8 +82,6 @@ public class SampleHumanDetector extends HumanDetector {
         super.updateInfo(messageManager);
         // 检查是否被卡住并发送求助信息
         checkStuckAndRequestHelp(messageManager);
-        // 新增：检查是否在避难所入口卡住
-        // checkRefugeEntranceStuck(messageManager);
 
         // 新增：处理来自消防队的市民消息
         processFireRescueMessages(messageManager);
@@ -262,14 +259,106 @@ public class SampleHumanDetector extends HumanDetector {
 
         // 使用加权评分系统选择最佳目标
         targets.sort(new WeightedPrioritySorter(this.worldInfo, this.agentInfo.me()));
-        Human selected = targets.get(0);
-        logger.debug("选择目标: " + selected + " with ID: " + selected.getID());
+        final int MAX_CANDIDATES = 5; // 候选池大小
+        int candidateCount = Math.min(MAX_CANDIDATES, targets.size());
+        
+        // 如果只有一个候选，直接选择
+        if (candidateCount == 1) {
+            this.result = targets.get(0).getID();
+            logger.debug("只有一个候选目标，直接选择: " + this.result);
+            return this.result;
+        }
+        
+        // 创建最终候选列表 (前N个最佳目标)
+        List<Human> finalCandidates = targets.subList(0, candidateCount);
+        
+        // 使用智能体自身ID生成一个确定性哈希值
+        int agentIdHash = Math.abs(agentInfo.getID().getValue());
+        
+        // 计算每个候选目标的最终得分（结合原始评分和距离）
+        final double DISTANCE_BIAS = 0.7; // 距离权重偏向
+        EntityID myPosition = agentInfo.getPosition();
+        Map<Human, Double> finalScores = new HashMap<>();
+        
+        // 复用WeightedPrioritySorter计算原始评分
+        WeightedPrioritySorter sorter = new WeightedPrioritySorter(this.worldInfo, this.agentInfo.me());
+        
+        for (Human candidate : finalCandidates) {
+            // 计算原始评分（通过反射或其他方式获取，或者直接复制计算逻辑）
+            double originalScore = calculatePriorityScore(sorter, candidate);
+            
+            // 计算距离得分（距离越近，得分越高）
+            int distance = worldInfo.getDistance(myPosition, candidate.getPosition());
+            double distanceScore = 1.0 / (1.0 + distance / 10000.0); // 距离衰减函数
+            
+            // 计算加权最终得分
+            double combinedScore = (originalScore * (1 - DISTANCE_BIAS)) + (distanceScore * DISTANCE_BIAS);
+            finalScores.put(candidate, combinedScore);
+            
+            logger.debug("候选目标 " + candidate.getID() + 
+                        " 原始分: " + String.format("%.3f", originalScore) +
+                        " 距离分: " + String.format("%.3f", distanceScore) +
+                        " 综合分: " + String.format("%.3f", combinedScore));
+        }
+        
+        // 按最终得分排序候选目标
+        finalCandidates.sort((a, b) -> Double.compare(finalScores.get(b), finalScores.get(a)));
+        
+        // 引入ID哈希扰动：基于智能体ID决定选择哪个候选
+        int chosenIndex = determineChosenIndex(agentIdHash, finalCandidates.size());
+        
+        Human selected = finalCandidates.get(chosenIndex);
+        this.result = selected.getID();
+        
+        logger.debug("智能体 [" + agentInfo.getID() + "] 从 " + candidateCount + 
+                    " 个候选目标中选择了第" + (chosenIndex + 1) + 
+                    "顺位目标 (ID:" + selected.getID() + ")。" +
+                    "排名第一的目标是:" + targets.get(0).getID());
 
-        return selected.getID();
+        return this.result;
+    }
+
+    // 辅助方法：计算单个目标的优先级分数（复用WeightedPrioritySorter的逻辑）
+    private double calculatePriorityScore(WeightedPrioritySorter sorter, Human human) {
+        try {
+            return sorter.getPriorityScore(human);
+        } catch (Exception e) {
+            logger.error("计算优先级分数失败", e);
+            // 备用方案：简单计算一个分数
+            return 0.5;
+        }
+    }
+
+    // 辅助方法：根据智能体ID哈希确定选择哪个候选目标
+    private int determineChosenIndex(int agentIdHash, int candidateCount) {
+        if (candidateCount <= 1) return 0;
+        
+        // 生成一个0-1之间的确定性值
+        double roll = (agentIdHash % 100) / 100.0;
+        
+        // 根据智能体ID的奇偶性赋予不同的行为模式
+        if (agentIdHash % 2 == 0) { 
+            // 哈希值为偶数的智能体：85%概率选第一，15%概率选第二
+            if (roll > 0.85 && candidateCount > 1) {
+                return 1;
+            }
+            return 0;
+        } else { 
+            // 哈希值为奇数的智能体：80%概率选第一，20%概率选第二或第三
+            if (roll > 0.80 && candidateCount > 1) {
+                // 在第二和第三之间选择
+                int option = (agentIdHash % 2) + 1;
+                return Math.min(option, candidateCount - 1);
+            }
+            return 0;
+        }
     }
 
     // 新的加权优先级排序器
     private class WeightedPrioritySorter implements Comparator<StandardEntity> {
+        public double getPriorityScore(Human human) {
+            return calculatePriorityScore(human);
+        }
         private StandardEntity reference;
         private WorldInfo worldInfo;
 
@@ -439,7 +528,7 @@ public class SampleHumanDetector extends HumanDetector {
         return true;
     }
 
-        // 新增方法：检查建筑物入口是否被阻挡
+    // 检查建筑物入口是否被阻挡
     private boolean hasBlockedEntrance(Building building) {
         for (Edge edge : getEntranceEdges(building)) {
             EntityID roadID = edge.getNeighbour();
