@@ -22,14 +22,11 @@ import rescuecore2.standard.entities.FireBrigade;
 import rescuecore2.standard.entities.Human;
 import rescuecore2.standard.entities.StandardEntity;
 import rescuecore2.worldmodel.EntityID;
-// import org.apache.logging.log4j.Logger;
-import adf.core.debug.DefaultLogger; // 新增import
 import org.apache.log4j.Logger;
 
-import adf.core.agent.communication.MessageManager; // 新增import
 import adf.core.agent.communication.standard.bundle.StandardMessagePriority;
-import adf.core.agent.communication.standard.bundle.information.MessageCivilian; // 新增import
-import rescuecore2.standard.entities.Civilian; // 新增import
+import adf.core.agent.communication.standard.bundle.information.MessageCivilian;
+import rescuecore2.standard.entities.Civilian;
 
 
 public class DefaultExtActionFireRescue extends ExtAction {
@@ -42,11 +39,12 @@ public class DefaultExtActionFireRescue extends ExtAction {
 
   private EntityID target;
 
-  private MessageManager messageManager; // 新增字段
-  private EntityID lastRescuedCivilian = null; // 新增字段：记录上次救援的市民ID
+  private MessageManager messageManager;
+  private EntityID lastRescuedCivilian = null; // 记录上次救援的市民ID
 
   public DefaultExtActionFireRescue(AgentInfo agentInfo, WorldInfo worldInfo, ScenarioInfo scenarioInfo, ModuleManager moduleManager, DevelopData developData) {
     super(agentInfo, worldInfo, scenarioInfo, moduleManager, developData);
+    this.logger = org.apache.log4j.Logger.getLogger(this.getClass()); 
     this.target = null;
     this.thresholdRest = developData
         .getInteger("adf.impl.extaction.DefaultExtActionFireRescue.rest", 100);
@@ -62,6 +60,10 @@ public class DefaultExtActionFireRescue extends ExtAction {
     }
   }
 
+  public EntityID getLastRescuedCivilian()
+  {
+    return lastRescuedCivilian;
+  }
 
   public ExtAction precompute(PrecomputeData precomputeData) {
     super.precompute(precomputeData);
@@ -138,24 +140,23 @@ public class DefaultExtActionFireRescue extends ExtAction {
     this.result = null;
     FireBrigade agent = (FireBrigade) this.agentInfo.me();
 
-            // 检查上次救援的市民是否掩埋度变为0
-        if (lastRescuedCivilian != null) {
-            StandardEntity entity = worldInfo.getEntity(lastRescuedCivilian);
-            if (entity instanceof Human) {
-                Human human = (Human) entity;
-                if (human.isBuriednessDefined() && human.getBuriedness() == 0) {
-                    // 发送消息给救护队
-                    if (messageManager != null) {
-                        MessageCivilian msg = new MessageCivilian(true, StandardMessagePriority.HIGH, (Civilian) human);
-                        messageManager.addMessage(msg);
-                        // 日志记录
-                        // adf.core.debug.DefaultLogger.getLogger(agentInfo.me()).info("消防员发送市民救援消息: " + human.getID() + " 掩埋度已降为0");
-                        logger.debug("消防员发送市民救援消息: " + human.getID() + " 掩埋度已降为0");
-                    }
-                    lastRescuedCivilian = null; // 重置
+    // 检查上次救援的市民是否掩埋度变为0
+    if (lastRescuedCivilian != null) {
+        StandardEntity entity = worldInfo.getEntity(lastRescuedCivilian);
+        if (entity instanceof Human) {
+            Human human = (Human) entity;
+            if (human.isBuriednessDefined() && human.getBuriedness() == 0) {
+                // 发送消息给救护队
+                if (messageManager != null) {
+                    MessageCivilian msg = new MessageCivilian(true, StandardMessagePriority.HIGH, (Civilian) human);
+                    messageManager.addMessage(msg);
+                    // 日志记录
+                    logger.debug("消防员发送市民救援消息: " + human.getID() + " 掩埋度已降为0");
                 }
+                lastRescuedCivilian = null; // 重置
             }
         }
+    }
 
     if (this.needRest(agent)) {
       EntityID areaID = this.convertArea(this.target);
@@ -189,6 +190,8 @@ public class DefaultExtActionFireRescue extends ExtAction {
       EntityID targetPosition = human.getPosition();
       if (agentPosition.getValue() == targetPosition.getValue()) {
         if (human.isBuriednessDefined() && human.getBuriedness() > 0) {
+          this.lastRescuedCivilian = human.getID();
+          logger.debug("消防员开始救援市民，记录目标: " + this.lastRescuedCivilian);
           return new ActionRescue(human);
         }
       } else {

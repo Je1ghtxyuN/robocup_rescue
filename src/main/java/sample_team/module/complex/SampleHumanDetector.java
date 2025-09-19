@@ -175,7 +175,6 @@ public class SampleHumanDetector extends HumanDetector {
     private void processFireRescueMessages(MessageManager messageManager) {
         // 获取收到的MessageCivilian消息
         List<CommunicationMessage> messages = messageManager.getReceivedMessageList(MessageCivilian.class);
-        logger.debug("收到消防队消息");
         for (CommunicationMessage msg : messages) {
             MessageCivilian civilianMsg = (MessageCivilian) msg;
             EntityID civilianID = civilianMsg.getAgentID();
@@ -246,7 +245,7 @@ public class SampleHumanDetector extends HumanDetector {
         // 使用加权评分系统选择最佳目标
         targets.sort(new WeightedPrioritySorter(this.worldInfo, this.agentInfo.me()));
         Human selected = targets.get(0);
-        logger.debug("Selected target: " + selected + " with ID: " + selected.getID());
+        logger.debug("选择目标: " + selected + " with ID: " + selected.getID());
 
         return selected.getID();
     }
@@ -348,6 +347,7 @@ public class SampleHumanDetector extends HumanDetector {
                 continue;
             rescueTargets.add(h);
         }
+        logger.debug("过滤后有效目标数量: " + rescueTargets.size());
         return rescueTargets;
     }
 
@@ -379,8 +379,11 @@ public class SampleHumanDetector extends HumanDetector {
             return false;
 
         Human target = (Human) entity;
-        if (!target.isHPDefined() || target.getHP() == 0)
+        if (!target.isHPDefined() || target.getHP() == 0){        
+            logger.debug("无效目标: " + target + " HP未定义或为0");
             return false;
+        }
+
         if (!target.isPositionDefined())
             return false;
         if (!target.isDamageDefined() || target.getDamage() == 0)
@@ -390,14 +393,14 @@ public class SampleHumanDetector extends HumanDetector {
 
         // 综合属性检查
         if (target.getDamage() < MIN_DAMAGE_THRESHOLD && target.getHP() < MIN_HP_THRESHOLD&& target.getBuriedness() > MIN_BURIEDNESS_THRESHOLD ){
-            logger.debug("Invalid due to low damage and HP: " + target);
+            logger.debug("不值得救援的目标: " + target);
             return false;
         }
 
         // 只有消防队才检查掩埋程度是否为0
         if (agentInfo.me().getStandardURN() == StandardEntityURN.FIRE_BRIGADE) {
             if (target.getBuriedness() == 0) {
-                logger.debug("Invalid due to low buriedness: " + target);
+                logger.debug("掩埋程度为0,消防队可以走了 " + target);
             return false;
             }
         }
@@ -408,7 +411,7 @@ public class SampleHumanDetector extends HumanDetector {
 
 
        if (position instanceof Building && hasBlockedEntrance((Building) position)) {
-            logger.debug("Invalid due to blocked entrance: " + target);
+            logger.debug("建筑物入口挡着了： " + target);
             return false;
         }
         StandardEntityURN positionURN = position.getStandardURN();
