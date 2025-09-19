@@ -22,8 +22,9 @@ import java.awt.geom.Area;
 import java.awt.Shape;
 
 public class SampleRoadDetector extends RoadDetector {
-
-    private SampleSearch sampleSearch;
+    // 全局市民状态跟踪器
+    private static final Map<EntityID, CivilianStatus> GLOBAL_CIVILIAN_STATUS = new HashMap<>();
+    private static final Object STATUS_LOCK = new Object();
 
     // 在类变量部分添加以下字段
     private static final int INITIAL_PHASE_DURATION = 30; // 开局阶段持续时间（秒）
@@ -73,26 +74,31 @@ public class SampleRoadDetector extends RoadDetector {
     // 记录已处理的请求位置，防止重复处理
     private static final Map<EntityID, Integer> processedHelpRequests = new HashMap<>();
     private static final int PROCESSED_COOLDOWN = 15; // 处理冷却时间
-
-    // 记录已接触过的伤员
-    private Set<EntityID> contactedHumans = new HashSet<>();
-    // 当前目标伤员
-    private EntityID currentTargetHuman = null;
     
     // 防止警察聚集的共享状态
     private static final Map<EntityID, EntityID> reservedTargets = new HashMap<>();
     private static final Map<EntityID, Integer> reservationTimes = new HashMap<>();
     private static final int RESERVATION_TIMEOUT = 30; // 30时间单位后保留失效
 
+    // 市民状态内部类
+    private static class CivilianStatus {
+        int assignmentTime;       // 分配时间
+        boolean beingRescued;     // 是否正在被救援
+        boolean rescued;          // 是否已被救援
+        
+        CivilianStatus(EntityID policeId, int time) {
+            this.assignmentTime = time;
+            this.beingRescued = true;
+            this.rescued = false;
+        }
+    }
+
     public SampleRoadDetector(AgentInfo ai, WorldInfo wi, ScenarioInfo si,
                             ModuleManager moduleManager, DevelopData developData) {
         super(ai, wi, si, moduleManager, developData);
         this.clustering = moduleManager.getModule(
             "SampleRoadDetector.Clustering",
-            "sample_team.module.algorithm.KMeansClustering");
-        this.sampleSearch = moduleManager.getModule(
-            "SampleSearch",
-            "sample_team.module.complex.SampleSearch");    
+            "sample_team.module.algorithm.KMeansClustering");   
     }
 
     @Override
@@ -128,26 +134,25 @@ public class SampleRoadDetector extends RoadDetector {
         // 清理过期的处理记录
         cleanupOldProcessedRequests();
         
-        // 检查是否接触到了当前目标伤员
-        if (currentTargetHuman != null) {
-            StandardEntity entity = worldInfo.getEntity(currentTargetHuman);
-            if (entity instanceof Human) {
-                Human human = (Human) entity;
-                
-                // 检查是否在伤员所在的位置
-                if (agentInfo.getPosition().equals(human.getPosition())) {
-                    contactedHumans.add(currentTargetHuman);
-                    // 释放目标保留
-                    releaseReservedTarget(currentTargetHuman);
-                    currentTargetHuman = null; // 清除当前目标
-                }
-            }
-        }
+        // 清理过期的市民分配
+        cleanupExpiredAssignments();
         
         // 清理过期的目标保留
         cleanupExpiredReservations();
         
         return this;
+    }
+
+    // 清理过期的市民分配
+    private void cleanupExpiredAssignments() {
+        int currentTime = agentInfo.getTime();
+        synchronized (STATUS_LOCK) {
+            GLOBAL_CIVILIAN_STATUS.entrySet().removeIf(entry -> 
+                entry.getValue().beingRescued && 
+                !entry.getValue().rescued &&
+                currentTime - entry.getValue().assignmentTime > LOCK_TIMEOUT
+            );
+        }
     }
 
     // 清理过期的处理记录
@@ -318,15 +323,6 @@ public class SampleRoadDetector extends RoadDetector {
         List<Human> rescueTargets = filterRescueTargets(
             worldInfo.getEntitiesOfType(StandardEntityURN.CIVILIAN));
         
-        // 新增：过滤掉位于已搜索建筑中的平民
-        if (sampleSearch != null) {
-            Set<EntityID> searchedBuildings = sampleSearch.getSearchedBuildings();
-            rescueTargets.removeIf(human -> {
-                EntityID positionID = human.getPosition();
-                return searchedBuildings.contains(positionID);
-            });
-        }
-
         // 2. 过滤在集群内的目标
         List<Human> rescueTargetsInCluster = filterInCluster(rescueTargets);
         List<Human> targets = rescueTargetsInCluster.isEmpty() ? rescueTargets : rescueTargetsInCluster;
@@ -339,57 +335,26 @@ public class SampleRoadDetector extends RoadDetector {
         // 4. 使用加权评分系统选择最佳目标
         targets.sort(new WeightedPrioritySorter(worldInfo, agentInfo.me()));
         
-        // 5. 从高优先级目标中选取第一个未接触过且未被其他警察保留的目标
+        // 5. 从高优先级目标中选取第一个未被其他警察分配的目标
         for (Human human : targets) {
             EntityID humanId = human.getID();
-            if (!contactedHumans.contains(humanId) && !isReservedByOtherPolice(humanId)) {
-                // 保留这个目标
-                reserveTarget(humanId);
-                this.currentTargetHuman = humanId; // 设置当前目标伤员
-                return human.getPosition(); // 返回市民所在位置
-            }
-        }
-        
-        // 6. 如果所有目标都已接触过或被保留，选择优先级最高的可用目标
-        for (Human human : targets) {
-            EntityID humanId = human.getID();
-            if (!isReservedByOtherPolice(humanId)) {
-                reserveTarget(humanId);
-                this.currentTargetHuman = humanId;
-                return human.getPosition();
+            
+            // 检查市民是否已被分配或正在被救援
+            synchronized (STATUS_LOCK) {
+                CivilianStatus status = GLOBAL_CIVILIAN_STATUS.get(humanId);
+                
+                // 如果市民未被分配，或者分配已过期
+                if (status == null || 
+                    (!status.rescued && agentInfo.getTime() - status.assignmentTime > LOCK_TIMEOUT)) {
+                    
+                    // 分配给自己
+                    GLOBAL_CIVILIAN_STATUS.put(humanId, new CivilianStatus(agentInfo.getID(), agentInfo.getTime()));
+                    return human.getPosition(); // 返回市民所在位置
+                }
             }
         }
         
         return null;
-    }
-
-    // 检查目标是否被其他警察保留
-    private boolean isReservedByOtherPolice(EntityID humanId) {
-        EntityID reservingPolice = reservedTargets.get(humanId);
-        return reservingPolice != null && 
-               !reservingPolice.equals(agentInfo.getID()) && 
-               !isReservationExpired(humanId);
-    }
-
-    // 保留目标
-    private void reserveTarget(EntityID humanId) {
-        reservedTargets.put(humanId, agentInfo.getID());
-        reservationTimes.put(humanId, currentTime);
-    }
-
-    // 释放目标保留
-    private void releaseReservedTarget(EntityID humanId) {
-        if (agentInfo.getID().equals(reservedTargets.get(humanId))) {
-            reservedTargets.remove(humanId);
-            reservationTimes.remove(humanId);
-        }
-    }
-
-    // 检查保留是否过期
-    private boolean isReservationExpired(EntityID humanId) {
-        Integer reservationTime = reservationTimes.get(humanId);
-        if (reservationTime == null) return true;
-        return (currentTime - reservationTime) > RESERVATION_TIMEOUT;
     }
 
     // 清理过期的目标保留
