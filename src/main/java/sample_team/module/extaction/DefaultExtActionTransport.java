@@ -51,7 +51,7 @@ public class DefaultExtActionTransport extends ExtAction {
       case NON_PRECOMPUTE:
         this.pathPlanning = moduleManager.getModule(
             "DefaultExtActionTransport.PathPlanning",
-            "adf.impl.module.algorithm.DijkstraPathPlanning");
+            "adf.impl.module.algorithm.AStarPathPlanning");
         break;
     }
   }

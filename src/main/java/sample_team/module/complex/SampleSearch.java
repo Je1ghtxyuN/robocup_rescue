@@ -76,13 +76,13 @@ public class SampleSearch extends Search {
         } else if (agentURN == FIRE_BRIGADE) {
             this.pathPlanning = moduleManager.getModule(
                     "SampleSearch.PathPlanning.Fire",
-                    "sample_team.module.algorithm.DijkstraPathPlanning");
+                    "sample_team.module.algorithm.AStarPathPlanning");
             this.clustering = moduleManager.getModule("SampleSearch.Clustering.Fire",
                     "sample_team.module.algorithm.KMeansClustering");
         } else if (agentURN == POLICE_FORCE) {
             this.pathPlanning = moduleManager.getModule(
                     "SampleSearch.PathPlanning.Police",
-                    "sample_team.module.algorithm.DijkstraPathPlanning");
+                    "sample_team.module.algorithm.AStarPathPlanning");
             this.clustering = moduleManager.getModule(
                     "SampleSearch.Clustering.Police",
                     "sample_team.module.algorithm.KMeansClustering");

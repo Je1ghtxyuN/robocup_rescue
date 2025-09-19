@@ -74,7 +74,7 @@ public class DefaultExtActionClear extends ExtAction {
       case NON_PRECOMPUTE:
         this.pathPlanning = moduleManager.getModule(
             "DefaultExtActionClear.PathPlanning",
-            "adf.impl.module.algorithm.DijkstraPathPlanning");
+            "adf.impl.module.algorithm.AStarPathPlanning");
         break;
     }
   }

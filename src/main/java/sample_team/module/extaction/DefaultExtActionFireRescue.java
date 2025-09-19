@@ -55,7 +55,7 @@ public class DefaultExtActionFireRescue extends ExtAction {
       case NON_PRECOMPUTE:
         this.pathPlanning = moduleManager.getModule(
             "DefaultExtActionFireRescue.PathPlanning",
-            "adf.impl.module.algorithm.DijkstraPathPlanning");
+            "adf.impl.module.algorithm.AStarPathPlanning");
         break;
     }
   }

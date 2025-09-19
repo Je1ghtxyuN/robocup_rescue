@@ -231,6 +231,24 @@ public class SampleHumanDetector extends HumanDetector {
     }
 
     private EntityID calcTarget() {
+        // 如果是消防员，并且当前位置是建筑物，则优先处理同一建筑物内的伤员
+        if (agentInfo.me().getStandardURN() == StandardEntityURN.FIRE_BRIGADE) {
+            StandardEntity positionEntity = worldInfo.getEntity(agentInfo.getPosition());
+            if (positionEntity instanceof Building) {
+                Building currentBuilding = (Building) positionEntity;
+                List<Human> civiliansInBuilding = getCiviliansInBuilding(currentBuilding);
+                List<Human> validCiviliansInBuilding = filterRescueTargets(civiliansInBuilding); // 过滤有效伤员
+                if (!validCiviliansInBuilding.isEmpty()) {
+                    // 使用加权评分系统选择建筑物内的最佳目标
+                    validCiviliansInBuilding.sort(new WeightedPrioritySorter(this.worldInfo, this.agentInfo.me()));
+                    Human selected = validCiviliansInBuilding.get(0);
+                    logger.debug("消防在建筑: " + currentBuilding.getID() + ", 选择市民: " + selected.getID());
+                    return selected.getID();
+                }
+            }
+        }
+
+        //处理全局目标
         List<Human> rescueTargets = filterRescueTargets(
                 this.worldInfo.getEntitiesOfType(CIVILIAN));
         List<Human> rescueTargetsInCluster = filterInCluster(rescueTargets);
@@ -472,4 +490,18 @@ public class SampleHumanDetector extends HumanDetector {
         }
         return false;
     }
+
+    // 新增方法：获取建筑物内的市民列表
+    private List<Human> getCiviliansInBuilding(Building building) {
+    List<Human> civilians = new ArrayList<>();
+    Collection<StandardEntity> civiliansEntities = worldInfo.getEntitiesOfType(StandardEntityURN.CIVILIAN);
+    for (StandardEntity entity : civiliansEntities) {
+        Human human = (Human) entity;
+        if (human.isPositionDefined() && human.getPosition().equals(building.getID())) {
+            civilians.add(human);
+        }
+    }
+    logger.debug("建筑物 " + building.getID() + " 内的市民数量: " + civilians.size());
+    return civilians;
+}
 }
