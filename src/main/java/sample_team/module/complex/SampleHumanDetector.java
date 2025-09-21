@@ -37,8 +37,10 @@ import java.awt.geom.Area;
 import java.awt.Shape;
 
 import adf.core.agent.communication.standard.bundle.information.MessageCivilian; // 新增import
-import java.util.LinkedList; // 新增import
-import java.util.Queue; // 新增import
+import java.util.LinkedList;
+import java.util.Queue; 
+import java.util.Random;
+import java.util.concurrent.ConcurrentHashMap; 
 
 
 public class SampleHumanDetector extends HumanDetector {
@@ -65,8 +67,13 @@ public class SampleHumanDetector extends HumanDetector {
     private static final Map<EntityID, Integer> sentHelpRequests = new HashMap<>();
     private static final int REQUEST_COOLDOWN = 10; // 请求冷却时间
 
-    // 新增字段：存储需要搬运的市民队列
+    // 存储需要搬运的市民队列
     private Queue<EntityID> rescuedCivilians = new LinkedList<>();
+
+    // 存储最近选择的目标历史，用于协调多个消防员
+    private static final Map<EntityID, Long> recentlyChosenTargets = new ConcurrentHashMap<>();
+    private static final long TARGET_COOLDOWN = 20; // 目标冷却时间（时间步）
+    private final Random random = new Random(); // 每个实例有自己的随机数生成器
 
 
     public SampleHumanDetector(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager, DevelopData developData) {
@@ -83,12 +90,20 @@ public class SampleHumanDetector extends HumanDetector {
         super.updateInfo(messageManager);
         // 检查是否被卡住并发送求助信息
         checkStuckAndRequestHelp(messageManager);
-        // 新增：检查是否在避难所入口卡住
-        // checkRefugeEntranceStuck(messageManager);
 
-        // 新增：处理来自消防队的市民消息
+        // 新增：清理过期的目标选择记录
+        cleanupOldTargetChoices();
+
+        // 处理来自消防队的市民消息
         processFireRescueMessages(messageManager);
         return this;
+    }
+
+    // 新增方法：清理过期的目标选择记录
+    private void cleanupOldTargetChoices() {
+        long currentTime = agentInfo.getTime();
+        recentlyChosenTargets.entrySet().removeIf(entry -> 
+            currentTime - entry.getValue() > TARGET_COOLDOWN);
     }
 
     // 检查是否被卡住，如果卡住太久就发送求助信息给警察
@@ -127,11 +142,6 @@ public class SampleHumanDetector extends HumanDetector {
 
     // 发送道路求助请求给警察
     private void sendRoadHelpRequest(MessageManager messageManager, EntityID position) {
-        // 检查是否已有其他救援单位发送了相同位置的请求
-        // if (sentHelpRequests.containsKey(position)) {
-        //     logger.debug("已有其他救援单位请求处理位置 " + position + "，跳过发送");
-        //     return;
-        // }
         
         StandardEntity entity = worldInfo.getEntity(position);
         
@@ -241,7 +251,7 @@ public class SampleHumanDetector extends HumanDetector {
                 if (!validCiviliansInBuilding.isEmpty()) {
                     // 使用加权评分系统选择建筑物内的最佳目标
                     validCiviliansInBuilding.sort(new WeightedPrioritySorter(this.worldInfo, this.agentInfo.me()));
-                    Human selected = validCiviliansInBuilding.get(0);
+                    Human selected = coordinatedTargetSelection(validCiviliansInBuilding);
                     logger.debug("消防在建筑: " + currentBuilding.getID() + ", 选择市民: " + selected.getID());
                     return selected.getID();
                 }
@@ -262,11 +272,72 @@ public class SampleHumanDetector extends HumanDetector {
 
         // 使用加权评分系统选择最佳目标
         targets.sort(new WeightedPrioritySorter(this.worldInfo, this.agentInfo.me()));
-        Human selected = targets.get(0);
+        Human selected = coordinatedTargetSelection(targets);
         logger.debug("选择目标: " + selected + " with ID: " + selected.getID());
 
         return selected.getID();
     }
+
+    // 新增方法：协调目标选择，避免所有消防员选择同一个目标
+    private Human coordinatedTargetSelection(List<Human> sortedTargets) {
+        if (sortedTargets.isEmpty()) {
+            return null;
+        }
+        
+        // 如果只有一个目标，直接返回
+        if (sortedTargets.size() == 1) {
+            return sortedTargets.get(0);
+        }
+        
+        // 获取当前时间
+        long currentTime = agentInfo.getTime();
+        
+        // 检查前两个目标是否最近被其他消防员选择过
+        Human firstChoice = sortedTargets.get(0);
+        Human secondChoice = sortedTargets.get(1);
+        
+        boolean firstRecentlyChosen = recentlyChosenTargets.containsKey(firstChoice.getID());
+        boolean secondRecentlyChosen = recentlyChosenTargets.containsKey(secondChoice.getID());
+        
+        // 如果两个目标最近都被选择过，则随机选择一个
+        if (firstRecentlyChosen && secondRecentlyChosen) {
+            int randomIndex = random.nextInt(sortedTargets.size());
+            Human selected = sortedTargets.get(randomIndex);
+            recentlyChosenTargets.put(selected.getID(), currentTime);
+            return selected;
+        }
+        // 如果只有第一个目标最近被选择过，有50%概率选择第二个目标
+        else if (firstRecentlyChosen) {
+            if (random.nextDouble() < 0.5) {
+                recentlyChosenTargets.put(secondChoice.getID(), currentTime);
+                return secondChoice;
+            } else {
+                recentlyChosenTargets.put(firstChoice.getID(), currentTime);
+                return firstChoice;
+            }
+        }
+        // 如果只有第二个目标最近被选择过，有50%概率选择第一个目标
+        else if (secondRecentlyChosen) {
+            if (random.nextDouble() < 0.5) {
+                recentlyChosenTargets.put(firstChoice.getID(), currentTime);
+                return firstChoice;
+            } else {
+                recentlyChosenTargets.put(secondChoice.getID(), currentTime);
+                return secondChoice;
+            }
+        }
+        // 如果两个目标都没有被最近选择过，有80%概率选择第一个，20%概率选择第二个
+        else {
+            if (random.nextDouble() < 0.8) {
+                recentlyChosenTargets.put(firstChoice.getID(), currentTime);
+                return firstChoice;
+            } else {
+                recentlyChosenTargets.put(secondChoice.getID(), currentTime);
+                return secondChoice;
+            }
+        }
+    }
+
 
     // 新的加权优先级排序器
     private class WeightedPrioritySorter implements Comparator<StandardEntity> {
