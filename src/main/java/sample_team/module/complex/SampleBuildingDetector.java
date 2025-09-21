@@ -3,7 +3,6 @@ package sample_team.module.complex;
 import static rescuecore2.standard.entities.StandardEntityURN.AMBULANCE_TEAM;
 import static rescuecore2.standard.entities.StandardEntityURN.CIVILIAN;
 import static rescuecore2.standard.entities.StandardEntityURN.REFUGE;
-import static rescuecore2.standard.entities.StandardEntityURN.FIRE_BRIGADE;
 import adf.core.agent.communication.MessageManager;
 import adf.core.agent.communication.standard.bundle.StandardMessagePriority;
 import adf.core.agent.communication.standard.bundle.information.MessageRoad;
@@ -53,7 +52,7 @@ public class SampleBuildingDetector extends HumanDetector {
     private static final int MIN_DAMAGE_THRESHOLD = 50;  // 伤害低于此值认为无效
     private static final int MIN_BURIEDNESS_THRESHOLD = 30; // 掩埋程度高于此值认为无效
 
-    // 新增：卡住检测相关字段
+    // 卡住检测相关字段
     private EntityID lastPosition;//上一回合位置
     private int stuckCount = 0;  // 被卡住的计数
     
@@ -78,9 +77,7 @@ public class SampleBuildingDetector extends HumanDetector {
         return this;
     }
 
-    /**
-     * 检查是否被卡住，如果卡住太久就发送求助信息给警察
-     */
+    // 检查是否被卡住，如果卡住太久就发送求助信息给警察
     private void checkStuckAndRequestHelp(MessageManager messageManager) {
         EntityID currentPosition = agentInfo.getPosition();
         logger.debug("上一次位置: " + lastPosition + " ,当前位置："+currentPosition);
@@ -107,18 +104,14 @@ public class SampleBuildingDetector extends HumanDetector {
         cleanupOldRequests();
     }
     
-    /**
-     * 清理过期的请求记录
-     */
+    // 清理过期的请求记录
     private void cleanupOldRequests() {
         int currentTime = agentInfo.getTime();
         sentHelpRequests.entrySet().removeIf(entry -> 
             currentTime - entry.getValue() > REQUEST_COOLDOWN);
     }
 
-    /**
-     * 发送道路求助请求给警察
-     */
+    // 发送道路求助请求给警察
     private void sendRoadHelpRequest(MessageManager messageManager, EntityID position) {
         // 检查是否已有其他救援单位发送了相同位置的请求
         if (sentHelpRequests.containsKey(position)) {
@@ -171,9 +164,7 @@ public class SampleBuildingDetector extends HumanDetector {
         }
     }
     
-    /**
-     * 检查是否有消防员在同一位置
-     */
+    // 检查是否有消防员在同一位置
     private boolean checkFirefighterAtLocation(EntityID position) {
         for (StandardEntity entity : worldInfo.getEntitiesOfType(StandardEntityURN.FIRE_BRIGADE)) {
             // 确保实体是Human类型（FireBrigade是Human的子类）
