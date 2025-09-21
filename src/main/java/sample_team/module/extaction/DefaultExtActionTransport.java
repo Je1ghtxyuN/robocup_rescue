@@ -277,7 +277,7 @@ public class DefaultExtActionTransport extends ExtAction {
         return calcRefugeAction(agent, pathPlanning,
             Lists.newArrayList(human.getPosition()), true);
       }
-      // 修改部分：选择最短路径的避难所
+      // 选择最短路径的避难所
       Collection<EntityID> refugeIDs = this.worldInfo.getEntityIDsOfType(REFUGE);
       List<EntityID> shortestPath = null;
       EntityID nearestRefuge = null;

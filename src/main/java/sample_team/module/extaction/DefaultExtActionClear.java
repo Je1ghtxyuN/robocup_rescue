@@ -2,7 +2,6 @@ package sample_team.module.extaction;
 
 import adf.core.agent.action.Action;
 import adf.core.agent.action.common.ActionMove;
-import adf.core.agent.action.common.ActionRest;
 import adf.core.agent.action.police.ActionClear;
 import adf.core.agent.communication.MessageManager;
 import adf.core.agent.develop.DevelopData;
@@ -14,7 +13,6 @@ import adf.core.agent.precompute.PrecomputeData;
 import adf.core.component.extaction.ExtAction;
 import adf.core.component.module.algorithm.PathPlanning;
 import com.google.common.collect.Lists;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -23,7 +21,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
-import rescuecore2.config.NoSuchConfigOptionException;
 import rescuecore2.misc.geometry.GeometryTools2D;
 import rescuecore2.misc.geometry.Line2D;
 import rescuecore2.misc.geometry.Point2D;
@@ -45,8 +42,6 @@ public class DefaultExtActionClear extends ExtAction {
 
   private int clearDistance;
   private int forcedMove;
-  private int thresholdRest;
-  private int kernelTime;
 
   private EntityID target;
   private Map<EntityID, Set<Point2D>> movePointCache;
@@ -59,8 +54,6 @@ public class DefaultExtActionClear extends ExtAction {
     this.clearDistance = si.getClearRepairDistance();
     this.forcedMove = developData
         .getInteger("adf.impl.extaction.DefaultExtActionClear.forcedMove", 3);
-    this.thresholdRest = developData
-        .getInteger("adf.impl.extaction.DefaultExtActionClear.rest", 100);
 
     this.target = null;
     this.movePointCache = new HashMap<>();
@@ -87,11 +80,6 @@ public class DefaultExtActionClear extends ExtAction {
       return this;
     }
     this.pathPlanning.precompute(precomputeData);
-    try {
-      this.kernelTime = this.scenarioInfo.getKernelTimesteps();
-    } catch (NoSuchConfigOptionException e) {
-      this.kernelTime = -1;
-    }
     return this;
   }
 
@@ -103,11 +91,6 @@ public class DefaultExtActionClear extends ExtAction {
       return this;
     }
     this.pathPlanning.resume(precomputeData);
-    try {
-      this.kernelTime = this.scenarioInfo.getKernelTimesteps();
-    } catch (NoSuchConfigOptionException e) {
-      this.kernelTime = -1;
-    }
     return this;
   }
 
@@ -119,11 +102,6 @@ public class DefaultExtActionClear extends ExtAction {
       return this;
     }
     this.pathPlanning.preparate();
-    try {
-      this.kernelTime = this.scenarioInfo.getKernelTimesteps();
-    } catch (NoSuchConfigOptionException e) {
-      this.kernelTime = -1;
-    }
     return this;
   }
 
@@ -160,17 +138,6 @@ public class DefaultExtActionClear extends ExtAction {
   public ExtAction calc() {
     this.result = null;
     PoliceForce policeForce = (PoliceForce) this.agentInfo.me();
-
-    if (this.needRest(policeForce)) {
-      List<EntityID> list = new ArrayList<>();
-      if (this.target != null) {
-        list.add(this.target);
-      }
-      this.result = this.calcRest(policeForce, this.pathPlanning, list);
-      if (this.result != null) {
-        return this;
-      }
-    }
 
     if (this.target == null) {
       return this;
@@ -752,66 +719,5 @@ public class DefaultExtActionClear extends ExtAction {
       this.movePointCache.put(road.getID(), points);
     }
     return points;
-  }
-
-
-  private boolean needRest(Human agent) {
-    int hp = agent.getHP();
-    int damage = agent.getDamage();
-    if (damage == 0 || hp == 0) {
-      return false;
-    }
-    int activeTime = (hp / damage) + ((hp % damage) != 0 ? 1 : 0);
-    if (this.kernelTime == -1) {
-      try {
-        this.kernelTime = this.scenarioInfo.getKernelTimesteps();
-      } catch (NoSuchConfigOptionException e) {
-        this.kernelTime = -1;
-      }
-    }
-    return damage >= this.thresholdRest
-        || (activeTime + this.agentInfo.getTime()) < this.kernelTime;
-  }
-
-
-  private Action calcRest(Human human, PathPlanning pathPlanning,
-      Collection<EntityID> targets) {
-    EntityID position = human.getPosition();
-    Collection<EntityID> refuges = this.worldInfo
-        .getEntityIDsOfType(StandardEntityURN.REFUGE);
-    int currentSize = refuges.size();
-    if (refuges.contains(position)) {
-      return new ActionRest();
-    }
-    List<EntityID> firstResult = null;
-    while (refuges.size() > 0) {
-      pathPlanning.setFrom(position);
-      pathPlanning.setDestination(refuges);
-      List<EntityID> path = pathPlanning.calc().getResult();
-      if (path != null && path.size() > 0) {
-        if (firstResult == null) {
-          firstResult = new ArrayList<>(path);
-          if (targets == null || targets.isEmpty()) {
-            break;
-          }
-        }
-        EntityID refugeID = path.get(path.size() - 1);
-        pathPlanning.setFrom(refugeID);
-        pathPlanning.setDestination(targets);
-        List<EntityID> fromRefugeToTarget = pathPlanning.calc().getResult();
-        if (fromRefugeToTarget != null && fromRefugeToTarget.size() > 0) {
-          return new ActionMove(path);
-        }
-        refuges.remove(refugeID);
-        // remove failed
-        if (currentSize == refuges.size()) {
-          break;
-        }
-        currentSize = refuges.size();
-      } else {
-        break;
-      }
-    }
-    return firstResult != null ? new ActionMove(firstResult) : null;
   }
 }

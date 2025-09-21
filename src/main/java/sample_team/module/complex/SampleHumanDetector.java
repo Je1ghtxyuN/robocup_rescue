@@ -40,6 +40,7 @@ import adf.core.agent.communication.standard.bundle.information.MessageCivilian;
 import java.util.LinkedList;
 import java.util.Queue; 
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap; 
 
 
@@ -69,6 +70,8 @@ public class SampleHumanDetector extends HumanDetector {
 
     // 存储需要搬运的市民队列
     private Queue<EntityID> rescuedCivilians = new LinkedList<>();
+    // 新增：存储警察报告的市民ID（用于去重）
+    private Set<EntityID> policeReportedCivilianIds = new HashSet<>();
 
     // 存储最近选择的目标历史，用于协调多个消防员
     private static final Map<EntityID, Long> recentlyChosenTargets = new ConcurrentHashMap<>();
@@ -94,12 +97,30 @@ public class SampleHumanDetector extends HumanDetector {
         // 新增：清理过期的目标选择记录
         cleanupOldTargetChoices();
 
-        // 处理来自消防队的市民消息
+        // 处理来自消防队的市民消息和来自警察的市民消息
         processFireRescueMessages(messageManager);
+
+        // 新增：处理来自警察的市民消息
+        processPoliceCivilianMessages(messageManager);
+
         return this;
     }
 
-    // 新增方法：清理过期的目标选择记录
+    /**
+     * 新增：处理来自警察的市民消息
+     */
+    private void processPoliceCivilianMessages(MessageManager messageManager) {
+        // 获取收到的MessageCivilian消息
+        List<CommunicationMessage> messages = messageManager.getReceivedMessageList(MessageCivilian.class);
+        for (CommunicationMessage msg : messages) {
+            MessageCivilian civilianMsg = (MessageCivilian) msg;
+            EntityID civilianID = civilianMsg.getAgentID();
+            // 记录警察报告的市民ID（用于后续去重）
+            policeReportedCivilianIds.add(civilianID);
+        }
+    }
+
+    // 清理过期的目标选择记录
     private void cleanupOldTargetChoices() {
         long currentTime = agentInfo.getTime();
         recentlyChosenTargets.entrySet().removeIf(entry -> 
@@ -435,6 +456,28 @@ public class SampleHumanDetector extends HumanDetector {
             if (h.getBuriedness() == 0)
                 continue;
             rescueTargets.add(h);
+        }
+        // 新增：添加警察报告且damage>0的市民
+        for (EntityID civilianID : policeReportedCivilianIds) {
+            StandardEntity entity = worldInfo.getEntity(civilianID);
+            if (entity instanceof Human) {
+                Human human = (Human) entity;
+                // 检查市民是否有效且damage>0
+                if (isValidHuman(human) && human.isDamageDefined() && human.getDamage() > 0) {
+                    // 避免重复添加
+                    boolean alreadyExists = false;
+                    for (Human existing : rescueTargets) {
+                        if (existing.getID().equals(civilianID)) {
+                            alreadyExists = true;
+                            break;
+                        }
+                    }
+                    if (!alreadyExists) {
+                        rescueTargets.add(human);
+                        logger.debug("将警察报告的市民添加到救援目标列表: " + civilianID);
+                    }
+                }
+            }
         }
         logger.debug("过滤后有效目标数量: " + rescueTargets.size());
         return rescueTargets;

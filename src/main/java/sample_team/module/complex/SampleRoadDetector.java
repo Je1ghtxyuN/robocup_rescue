@@ -1,6 +1,7 @@
 package sample_team.module.complex;
 
 import adf.core.agent.communication.MessageManager;
+import adf.core.agent.communication.standard.bundle.information.MessageCivilian;
 import adf.core.agent.communication.standard.bundle.information.MessageRoad;
 import adf.core.agent.develop.DevelopData;
 import adf.core.agent.info.AgentInfo;
@@ -23,9 +24,12 @@ import java.awt.Shape;
 
 public class SampleRoadDetector extends RoadDetector {
 
+    // 新增：记录已发送广播的市民ID，防止重复发送
+    private Set<EntityID> sentCivilianMessages = new HashSet<>();
+
     private SampleSearch sampleSearch;
 
-    // 在类变量部分添加以下字段
+    // 初始清理避难所任务
     private static final int INITIAL_PHASE_DURATION = 30; // 开局阶段持续时间（秒）
     private EntityID initialRefugeTarget = null; // 初始分配的避难所目标
     private boolean initialTaskCompleted = false; // 初始任务是否完成
@@ -124,6 +128,9 @@ public class SampleRoadDetector extends RoadDetector {
         
         // 处理来自救护队的道路求助消息
         processRoadHelpRequests(messageManager);
+
+        // 新增：处理接收到的平民状态广播消息
+        processCivilianBroadcastMessages(messageManager);
         
         // 清理过期的处理记录
         cleanupOldProcessedRequests();
@@ -134,9 +141,22 @@ public class SampleRoadDetector extends RoadDetector {
             if (entity instanceof Human) {
                 Human human = (Human) entity;
                 
-                // 检查是否在伤员所在的位置
-                if (agentInfo.getPosition().equals(human.getPosition())) {
+                // 修改：检查是否在伤员所在的建筑内（而不是精确位置）
+                EntityID humanBuildingID = human.getPosition();
+                if (agentInfo.getPosition().equals(humanBuildingID)) {
                     contactedHumans.add(currentTargetHuman);
+
+                    // 新增：发送市民已处理广播
+                    if (human instanceof Civilian && !sentCivilianMessages.contains(currentTargetHuman)) {
+                        Civilian civilian = (Civilian) human;
+                        MessageCivilian message = new MessageCivilian(true, 
+                            adf.core.agent.communication.standard.bundle.StandardMessagePriority.LOW, 
+                            civilian);
+                        messageManager.addMessage(message, true); // true 表示检查重复
+                        sentCivilianMessages.add(currentTargetHuman);
+                        DefaultLogger.getLogger(agentInfo.me()).info("广播市民已处理消息: " + currentTargetHuman);
+                    }
+
                     // 释放目标保留
                     releaseReservedTarget(currentTargetHuman);
                     currentTargetHuman = null; // 清除当前目标
@@ -148,6 +168,33 @@ public class SampleRoadDetector extends RoadDetector {
         cleanupExpiredReservations();
         
         return this;
+    }
+
+    /**
+     * 处理从其他智能体接收到的平民状态广播消息。
+     * 根据消息更新本地 contactedHumans 集合。
+     */
+    private void processCivilianBroadcastMessages(MessageManager messageManager) {
+        // 获取所有接收到的 MessageCivilian 类型的消息
+        List<CommunicationMessage> civilianMessages = messageManager.getReceivedMessageList(MessageCivilian.class);
+        
+        for (CommunicationMessage msg : civilianMessages) {
+            MessageCivilian civilianMsg = (MessageCivilian) msg;
+            EntityID civilianId = civilianMsg.getAgentID(); // 获取消息中平民的ID
+            // 简单的实现：只要收到关于某个平民的消息，就认为有其他警察在处理它，本警察就不再干预。
+            boolean isProcessed = true; 
+            
+            if (isProcessed) {
+                contactedHumans.add(civilianId);
+                // 可选：如果这个平民刚好是当前目标，则释放它
+                if (civilianId.equals(currentTargetHuman)) {
+                    releaseReservedTarget(currentTargetHuman);
+                    currentTargetHuman = null;
+                }
+                // 记录日志
+                DefaultLogger.getLogger(agentInfo.me()).debug("通过广播更新平民状态，ID: " + civilianId + " 已被标记为已处理。");
+            }
+        }
     }
 
     // 清理过期的处理记录
@@ -217,20 +264,20 @@ public class SampleRoadDetector extends RoadDetector {
             }
         }
 
-        // 优先处理已锁定的目标
+        // 1.处理已锁定的目标
         if (lockedTarget != null && !isTargetCleared(lockedTarget)) {
             this.result = lockedTarget;
             return this;
         }
 
-        // 优先处理市民救援
+        // 2.处理市民救援
         EntityID civilianTarget = findCivilianTarget();
         if (civilianTarget != null) {
             this.result = civilianTarget;
             return this;
         }
 
-        // 优先处理求助请求
+        // 3.处理求助请求
         if (!helpRequests.isEmpty()) {
             EntityID helpTarget = selectHelpTarget();
             if (helpTarget != null) {
@@ -318,7 +365,7 @@ public class SampleRoadDetector extends RoadDetector {
         List<Human> rescueTargets = filterRescueTargets(
             worldInfo.getEntitiesOfType(StandardEntityURN.CIVILIAN));
         
-        // 新增：过滤掉位于已搜索建筑中的平民
+        // 过滤掉位于已搜索建筑中的平民
         if (sampleSearch != null) {
             Set<EntityID> searchedBuildings = sampleSearch.getSearchedBuildings();
             rescueTargets.removeIf(human -> {
