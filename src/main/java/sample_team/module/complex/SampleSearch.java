@@ -185,36 +185,36 @@ public class SampleSearch extends Search {
             originalTarget = path.get(path.size() - 1);
         }
         
-        // 当智能体为消防员和救护车时
-        if ((agentURN == AMBULANCE_TEAM || agentURN == FIRE_BRIGADE) 
-             && path != null && path.size() > 1) {
-        // 检测路径上的第一个障碍物
-        EntityID blockedRoad = findFirstBlockedRoadInPath(path);
+        // // 当智能体为消防员和救护车时
+        // if ((agentURN == AMBULANCE_TEAM || agentURN == FIRE_BRIGADE) 
+        //      && path != null && path.size() > 1) {
+        // // 检测路径上的第一个障碍物
+        // EntityID blockedRoad = findFirstBlockedRoadInPath(path);
         
-        if (blockedRoad != null) {
-            logger.debug("Detected blockade at: " + blockedRoad);
+        // if (blockedRoad != null) {
+        //     logger.debug("Detected blockade at: " + blockedRoad);
             
-            if (originalTarget != null) {
-                // 1. 暂时移出当前目标（非永久移除）
-                unsearchedBuildingIDs.remove(originalTarget);
+        //     if (originalTarget != null) {
+        //         // 1. 暂时移出当前目标（非永久移除）
+        //         unsearchedBuildingIDs.remove(originalTarget);
                 
-                // 2. 添加到待恢复列表（障碍清除后可恢复）
-                addToRecoverableTargets(originalTarget, blockedRoad);
+        //         // 2. 添加到待恢复列表（障碍清除后可恢复）
+        //         addToRecoverableTargets(originalTarget, blockedRoad);
                 
-                logger.debug("Temporarily removed target: " + originalTarget);
-            }
+        //         logger.debug("Temporarily removed target: " + originalTarget);
+        //     }
             
-            // 3. 重新规划到剩余目标
-            if (!unsearchedBuildingIDs.isEmpty()) {
-                this.pathPlanning.setFrom(this.agentInfo.getPosition());
-                this.pathPlanning.setDestination(this.unsearchedBuildingIDs);
-                path = this.pathPlanning.calc().getResult();
-                logger.debug("Replanned path: " + path);
-            } else {
-                path = null; // 无有效目标
-            }
-          }
-        }
+        //     // 3. 重新规划到剩余目标
+        //     if (!unsearchedBuildingIDs.isEmpty()) {
+        //         this.pathPlanning.setFrom(this.agentInfo.getPosition());
+        //         this.pathPlanning.setDestination(this.unsearchedBuildingIDs);
+        //         path = this.pathPlanning.calc().getResult();
+        //         logger.debug("Replanned path: " + path);
+        //     } else {
+        //         path = null; // 无有效目标
+        //     }
+        //   }
+        // }
 
         // 非警察或无路径，保持原逻辑
         if (path != null && path.size() > 2) {
@@ -226,61 +226,61 @@ public class SampleSearch extends Search {
 
         checkRecoverableTargets();// 检查恢复条件（每次计算时执行）
         
-        // 当智能体为警察时
-        if (agentURN == POLICE_FORCE) {
+        // // 当智能体为警察时
+        // if (agentURN == POLICE_FORCE) {
 
-            // 优先处理视野内障碍物
-            EntityID visibleBlockade = findVisibleBlockade();
-            if (visibleBlockade != null) {
-                this.result = visibleBlockade;
-                processedBlockades.add(visibleBlockade); // 记录已处理
-                return this;
-            }
+        //     // 优先处理视野内障碍物
+        //     EntityID visibleBlockade = findVisibleBlockade();
+        //     if (visibleBlockade != null) {
+        //         this.result = visibleBlockade;
+        //         processedBlockades.add(visibleBlockade); // 记录已处理
+        //         return this;
+        //     }
 
-            // 1. 优先处理高优先级障碍
-            EntityID blockadeTarget = findPriorityBlockade();
-            if (blockadeTarget != null) {
-                this.result = blockadeTarget;
-                return this;
-            }
+        //     // 1. 优先处理高优先级障碍
+        //     EntityID blockadeTarget = findPriorityBlockade();
+        //     if (blockadeTarget != null) {
+        //         this.result = blockadeTarget;
+        //         return this;
+        //     }
 
-            // 2. 没有障碍物时执行巡逻
-            if (this.patrolTargets.isEmpty()) {
-                generatePatrolRoute(); // 生成巡逻路线
-            }
+        //     // 2. 没有障碍物时执行巡逻
+        //     if (this.patrolTargets.isEmpty()) {
+        //         generatePatrolRoute(); // 生成巡逻路线
+        //     }
 
-            // 3. 获取下一个巡逻点
-            EntityID nextPatrolPoint = this.patrolTargets.poll();
-            if (nextPatrolPoint != null) {
-                this.patrolTargets.add(nextPatrolPoint); // 循环队列
-                this.result = nextPatrolPoint;
-            }
-        }
+        //     // 3. 获取下一个巡逻点
+        //     EntityID nextPatrolPoint = this.patrolTargets.poll();
+        //     if (nextPatrolPoint != null) {
+        //         this.patrolTargets.add(nextPatrolPoint); // 循环队列
+        //         this.result = nextPatrolPoint;
+        //     }
+        // }
 
         return this;
     }
 
-    // 检测路径中的第一个障碍物
-    private EntityID findFirstBlockedRoadInPath(List<EntityID> path) {
-        // 从当前位置之后的下一个点开始检查（跳过当前位置）
-        for (int i = 1; i < path.size(); i++) {
-            EntityID eid = path.get(i);
-            StandardEntity entity = worldInfo.getEntity(eid);
-            if (entity instanceof Road) {
-                Road road = (Road) entity;
-                if (road.isBlockadesDefined() && 
-                    !road.getBlockades().isEmpty()) {
-                    return road.getID(); // 返回受阻道路ID
-                }
-            }
-        }
-        return null; // 无阻碍
-    }
+    // // 检测路径中的第一个障碍物
+    // private EntityID findFirstBlockedRoadInPath(List<EntityID> path) {
+    //     // 从当前位置之后的下一个点开始检查（跳过当前位置）
+    //     for (int i = 1; i < path.size(); i++) {
+    //         EntityID eid = path.get(i);
+    //         StandardEntity entity = worldInfo.getEntity(eid);
+    //         if (entity instanceof Road) {
+    //             Road road = (Road) entity;
+    //             if (road.isBlockadesDefined() && 
+    //                 !road.getBlockades().isEmpty()) {
+    //                 return road.getID(); // 返回受阻道路ID
+    //             }
+    //         }
+    //     }
+    //     return null; // 无阻碍
+    // }
 
-    // 添加到待恢复列表
-    private void addToRecoverableTargets(EntityID target, EntityID blockage) {
-        recoverableTargets.put(target, blockage);
-    }
+    // // 添加到待恢复列表
+    // private void addToRecoverableTargets(EntityID target, EntityID blockage) {
+    //     recoverableTargets.put(target, blockage);
+    // }
 
     // 检查可恢复目标
     private void checkRecoverableTargets() {
@@ -304,29 +304,29 @@ public class SampleSearch extends Search {
         }
     }
 
-    // 检测视野内障碍物
-    private EntityID findVisibleBlockade() {
-        // 1. 定义视野范围（30米）
-        int viewRange = 30000;
+    // // 检测视野内障碍物
+    // private EntityID findVisibleBlockade() {
+    //     // 1. 定义视野范围（30米）
+    //     int viewRange = 30000;
         
-        // 2. 获取视野范围内的实体
-        Collection<StandardEntity> visibleEntities = worldInfo.getObjectsInRange(
-            agentInfo.getPosition(), viewRange);
+    //     // 2. 获取视野范围内的实体
+    //     Collection<StandardEntity> visibleEntities = worldInfo.getObjectsInRange(
+    //         agentInfo.getPosition(), viewRange);
         
-        // 3. 筛选可见的障碍物
-        for (StandardEntity entity : visibleEntities) {
-            if (entity instanceof Road) {
-                Road road = (Road) entity;
-                // 检查道路是否有未处理的障碍物
-                if (road.isBlockadesDefined() && 
-                    !road.getBlockades().isEmpty() &&
-                    !processedBlockades.contains(road.getID())) {
-                    return road.getID();
-                }
-            }
-        }
-        return null;
-    }
+    //     // 3. 筛选可见的障碍物
+    //     for (StandardEntity entity : visibleEntities) {
+    //         if (entity instanceof Road) {
+    //             Road road = (Road) entity;
+    //             // 检查道路是否有未处理的障碍物
+    //             if (road.isBlockadesDefined() && 
+    //                 !road.getBlockades().isEmpty() &&
+    //                 !processedBlockades.contains(road.getID())) {
+    //                 return road.getID();
+    //             }
+    //         }
+    //     }
+    //     return null;
+    // }
 
     // 生成环形巡逻路线
     private void generatePatrolRoute() {
@@ -408,58 +408,58 @@ public class SampleSearch extends Search {
 
 
 
-    // 查找高优先级障碍
-    private EntityID findPriorityBlockade() {
-        // 1. 检查通往避难所的路径
-        Collection<EntityID> refugeIDs = worldInfo.getEntityIDsOfType(StandardEntityURN.REFUGE);
-        if (!refugeIDs.isEmpty()) {
-            pathPlanning.setFrom(agentInfo.getPosition());
-            pathPlanning.setDestination(refugeIDs);
-            List<EntityID> refugePath = pathPlanning.calc().getResult();
+    // // 查找高优先级障碍
+    // private EntityID findPriorityBlockade() {
+    //     // 1. 检查通往避难所的路径
+    //     Collection<EntityID> refugeIDs = worldInfo.getEntityIDsOfType(StandardEntityURN.REFUGE);
+    //     if (!refugeIDs.isEmpty()) {
+    //         pathPlanning.setFrom(agentInfo.getPosition());
+    //         pathPlanning.setDestination(refugeIDs);
+    //         List<EntityID> refugePath = pathPlanning.calc().getResult();
             
-            EntityID blockade = findBlockadeInPath(refugePath);
-            if (blockade != null) return blockade;
-        }
+    //         EntityID blockade = findBlockadeInPath(refugePath);
+    //         if (blockade != null) return blockade;
+    //     }
         
-        // 2. 检查通往未搜索建筑的路径
-        for (EntityID buildingID : unsearchedBuildingIDs) {
-            pathPlanning.setFrom(agentInfo.getPosition());
-            pathPlanning.setDestination(Collections.singleton(buildingID));
-            List<EntityID> path = pathPlanning.calc().getResult();
+    //     // 2. 检查通往未搜索建筑的路径
+    //     for (EntityID buildingID : unsearchedBuildingIDs) {
+    //         pathPlanning.setFrom(agentInfo.getPosition());
+    //         pathPlanning.setDestination(Collections.singleton(buildingID));
+    //         List<EntityID> path = pathPlanning.calc().getResult();
             
-            EntityID blockade = findBlockadeInPath(path);
-            if (blockade != null) return blockade;
-        }
+    //         EntityID blockade = findBlockadeInPath(path);
+    //         if (blockade != null) return blockade;
+    //     }
 
-        // 3. 检查巡逻路径上的障碍
-        for (EntityID patrolPoint : patrolTargets) {
-            pathPlanning.setFrom(agentInfo.getPosition());
-            pathPlanning.setDestination(patrolPoint);
-            List<EntityID> path = pathPlanning.calc().getResult();
-            EntityID blockade = findBlockadeInPath(path);
-            if (blockade != null) return blockade;
-        }
+    //     // 3. 检查巡逻路径上的障碍
+    //     for (EntityID patrolPoint : patrolTargets) {
+    //         pathPlanning.setFrom(agentInfo.getPosition());
+    //         pathPlanning.setDestination(patrolPoint);
+    //         List<EntityID> path = pathPlanning.calc().getResult();
+    //         EntityID blockade = findBlockadeInPath(path);
+    //         if (blockade != null) return blockade;
+    //     }
         
-        return null;
-    }
+    //     return null;
+    // }
     
-    // 路径障碍检查
-    private EntityID findBlockadeInPath(List<EntityID> path) {
-        if (path == null) return null;
+    // // 路径障碍检查
+    // private EntityID findBlockadeInPath(List<EntityID> path) {
+    //     if (path == null) return null;
         
-        for (EntityID eid : path) {
-            StandardEntity entity = worldInfo.getEntity(eid);
-            if (entity instanceof Road) {
-                Road road = (Road) entity;
-                if (road.isBlockadesDefined() && 
-                    !road.getBlockades().isEmpty() &&
-                    !processedBlockades.contains(road.getID())) {
-                    return road.getID();
-                }
-            }
-        }
-        return null;
-    }
+    //     for (EntityID eid : path) {
+    //         StandardEntity entity = worldInfo.getEntity(eid);
+    //         if (entity instanceof Road) {
+    //             Road road = (Road) entity;
+    //             if (road.isBlockadesDefined() && 
+    //                 !road.getBlockades().isEmpty() &&
+    //                 !processedBlockades.contains(road.getID())) {
+    //                 return road.getID();
+    //             }
+    //         }
+    //     }
+    //     return null;
+    // }
 
     private void reset() {
         this.unsearchedBuildingIDs.clear();
