@@ -271,7 +271,7 @@ public class SampleHumanDetector extends HumanDetector {
                 this.result = null;
             }
         }
-        
+
         // 首先检查自身damage是否大于0
         Human self = (Human) agentInfo.me();
         if (self.isDamageDefined() && self.getDamage() > 0) {
@@ -449,10 +449,10 @@ public class SampleHumanDetector extends HumanDetector {
         private WorldInfo worldInfo;
 
         // 权重配置 - 可以根据实际需求调整这些值
-        private static final double DISTANCE_WEIGHT = 0.3;
+        private static final double DISTANCE_WEIGHT = 0.2;
         private static final double HP_WEIGHT = 0.4;
         private static final double BURIEDNESS_WEIGHT = 0.1;
-        private static final double DAMAGE_WEIGHT = 0.2;
+        private static final double DAMAGE_WEIGHT = 0.3;
 
         WeightedPrioritySorter(WorldInfo wi, StandardEntity reference) {
             this.reference = reference;
@@ -492,7 +492,7 @@ public class SampleHumanDetector extends HumanDetector {
             int distance = this.worldInfo.getDistance(this.reference, human);
             // 使用指数衰减函数，距离越近分数越高
             // 调整分母以控制衰减速度
-            return Math.exp(-distance / 30000.0);
+            return Math.exp(-distance / 50000.0);
         }
 
         private double calculateHpScore(Human human) {
