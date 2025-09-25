@@ -3,6 +3,7 @@ package sample_team.module.complex;
 import static rescuecore2.standard.entities.StandardEntityURN.AMBULANCE_TEAM;
 import static rescuecore2.standard.entities.StandardEntityURN.CIVILIAN;
 import static rescuecore2.standard.entities.StandardEntityURN.REFUGE;
+import adf.core.component.module.algorithm.PathPlanning;
 import adf.core.agent.communication.MessageManager;
 import adf.core.agent.communication.standard.bundle.StandardMessagePriority;
 import adf.core.agent.communication.standard.bundle.information.MessageRoad;
@@ -49,6 +50,7 @@ public class SampleHumanDetector extends HumanDetector {
     private Clustering clustering;
     private EntityID result;
     private Logger logger;
+    private PathPlanning pathPlanning;
 
     // 属性最大值常量
     private static final int MAX_HP = 10000;
@@ -84,7 +86,11 @@ public class SampleHumanDetector extends HumanDetector {
         logger = DefaultLogger.getLogger(agentInfo.me());
         this.clustering = moduleManager.getModule("SampleHumanDetector.Clustering",
                 "adf.impl.module.algorithm.KMeansClustering");
+        this.pathPlanning = moduleManager.getModule(
+            "SampleHumanDetector.PathPlanning",
+            "adf.impl.module.algorithm.AStarPathPlanning");
         registerModule(this.clustering);
+        registerModule(this.pathPlanning);
     }
 
     @Override
@@ -212,12 +218,24 @@ public class SampleHumanDetector extends HumanDetector {
             StandardEntity entity = worldInfo.getEntity(civilianID);
             if (entity instanceof Human) {
                 Human human = (Human) entity;
-                // 检查市民是否有效且掩埋度为0
-                if (isValidHuman(human) && human.isBuriednessDefined() && human.getBuriedness() == 0) {
-                    // 避免重复添加
-                    if (!rescuedCivilians.contains(civilianID)) {
-                        rescuedCivilians.add(civilianID);
-                        logger.debug("收到消防队救援消息，市民 " + civilianID + " 已获救，需要搬运");
+                // 检查智能体是否有效
+                if (isValidHuman(human)) {
+                    // 对于市民，需要掩埋度为0；对于其他智能体，只需要有damage
+                    boolean shouldAdd = false;
+                    if (human.getStandardURN() == CIVILIAN) {
+                        if (human.isBuriednessDefined() && human.getBuriedness() == 0) {
+                            shouldAdd = true;
+                        }
+                    } else {
+                        shouldAdd = true; // 非市民智能体只要有damage就需要救援
+                    }
+                    
+                    if (shouldAdd) {
+                        // 避免重复添加
+                        if (!rescuedCivilians.contains(civilianID)) {
+                            rescuedCivilians.add(civilianID);
+                            logger.debug("收到消防队救援消息，智能体 " + civilianID + " 需要救援");
+                        }
                     }
                 }
             }
@@ -227,12 +245,42 @@ public class SampleHumanDetector extends HumanDetector {
 
     @Override
     public HumanDetector calc() {
+        // 首先检查自身damage是否大于0
+        Human self = (Human) agentInfo.me();
+        if (self.isDamageDefined() && self.getDamage() > 0) {
+            // 自身受伤，优先前往最近的避难所
+            EntityID agentPosition = agentInfo.getPosition();
+            Collection<EntityID> refugeIDs = this.worldInfo.getEntityIDsOfType(REFUGE);
+            List<EntityID> shortestPath = null;
+            EntityID nearestRefuge = null;
+            
+            // 遍历所有避难所，找到路径最短的
+            for (EntityID refugeID : refugeIDs) {
+                pathPlanning.setFrom(agentPosition);
+                pathPlanning.setDestination(refugeID);
+                List<EntityID> path = pathPlanning.calc().getResult();
+                if (path != null && path.size() > 0) {
+                    if (shortestPath == null || path.size() < shortestPath.size()) {
+                        shortestPath = path;
+                        nearestRefuge = refugeID;
+                    }
+                }
+            }
+            
+            if (nearestRefuge != null) {
+                this.result = nearestRefuge;
+                logger.debug("自身受伤，前往最近的避难所: " + nearestRefuge);
+                return this;
+            }
+        }
+
         Human transportHuman = this.agentInfo.someoneOnBoard();
         if (transportHuman != null) {
             logger.debug("someoneOnBoard:" + transportHuman);
             this.result = transportHuman.getID();
             return this;
         }
+
         if (this.result != null) {
             Human target = (Human) this.worldInfo.getEntity(this.result);
             if (!isValidHuman(target)) {
@@ -242,7 +290,8 @@ public class SampleHumanDetector extends HumanDetector {
         }
 
         // 优先处理来自消防队消息的市民
-        if (this.result == null && !rescuedCivilians.isEmpty()) {
+        if (agentInfo.me().getStandardURN() == StandardEntityURN.AMBULANCE_TEAM && 
+            this.result == null && !rescuedCivilians.isEmpty()) {
             EntityID nextCivilian = rescuedCivilians.poll();
             // 再次检查市民是否有效
             StandardEntity entity = worldInfo.getEntity(nextCivilian);
@@ -267,7 +316,7 @@ public class SampleHumanDetector extends HumanDetector {
             StandardEntity positionEntity = worldInfo.getEntity(agentInfo.getPosition());
             if (positionEntity instanceof Building) {
                 Building currentBuilding = (Building) positionEntity;
-                List<Human> civiliansInBuilding = getCiviliansInBuilding(currentBuilding);
+                List<Human> civiliansInBuilding = getBuriedHumansInBuilding(currentBuilding);
                 List<Human> validCiviliansInBuilding = filterRescueTargets(civiliansInBuilding); // 过滤有效伤员
                 if (!validCiviliansInBuilding.isEmpty()) {
                     // 使用加权评分系统选择建筑物内的最佳目标
@@ -279,9 +328,16 @@ public class SampleHumanDetector extends HumanDetector {
             }
         }
 
+        // 获取所有人类实体（包括各种智能体类型）
+        Collection<StandardEntity> allHumanEntities = new ArrayList<>();
+        allHumanEntities.addAll(worldInfo.getEntitiesOfType(CIVILIAN));
+        allHumanEntities.addAll(worldInfo.getEntitiesOfType(StandardEntityURN.POLICE_FORCE));
+        allHumanEntities.addAll(worldInfo.getEntitiesOfType(StandardEntityURN.FIRE_BRIGADE));
+        allHumanEntities.addAll(worldInfo.getEntitiesOfType(StandardEntityURN.AMBULANCE_TEAM));
+        
+
         //处理全局目标
-        List<Human> rescueTargets = filterRescueTargets(
-                this.worldInfo.getEntitiesOfType(CIVILIAN));
+        List<Human> rescueTargets = filterRescueTargets(allHumanEntities);
         List<Human> rescueTargetsInCluster = filterInCluster(rescueTargets);
         List<Human> targets = rescueTargetsInCluster.isEmpty() ? rescueTargets : rescueTargetsInCluster;
 
@@ -329,7 +385,7 @@ public class SampleHumanDetector extends HumanDetector {
         }
         // 如果只有第一个目标最近被选择过，有50%概率选择第二个目标
         else if (firstRecentlyChosen) {
-            if (random.nextDouble() < 0.5) {
+            if (random.nextDouble() < 0.4) {
                 recentlyChosenTargets.put(secondChoice.getID(), currentTime);
                 return secondChoice;
             } else {
@@ -339,7 +395,7 @@ public class SampleHumanDetector extends HumanDetector {
         }
         // 如果只有第二个目标最近被选择过，有50%概率选择第一个目标
         else if (secondRecentlyChosen) {
-            if (random.nextDouble() < 0.5) {
+            if (random.nextDouble() < 0.7) {
                 recentlyChosenTargets.put(firstChoice.getID(), currentTime);
                 return firstChoice;
             } else {
@@ -366,10 +422,10 @@ public class SampleHumanDetector extends HumanDetector {
         private WorldInfo worldInfo;
 
         // 权重配置 - 可以根据实际需求调整这些值
-        private static final double DISTANCE_WEIGHT = 0.5;
-        private static final double HP_WEIGHT = 0.2;
-        private static final double BURIEDNESS_WEIGHT = 0.15;
-        private static final double DAMAGE_WEIGHT = 0.15;
+        private static final double DISTANCE_WEIGHT = 0.3;
+        private static final double HP_WEIGHT = 0.4;
+        private static final double BURIEDNESS_WEIGHT = 0.1;
+        private static final double DAMAGE_WEIGHT = 0.2;
 
         WeightedPrioritySorter(WorldInfo wi, StandardEntity reference) {
             this.reference = reference;
@@ -408,8 +464,8 @@ public class SampleHumanDetector extends HumanDetector {
         private double calculateDistanceScore(Human human) {
             int distance = this.worldInfo.getDistance(this.reference, human);
             // 使用指数衰减函数，距离越近分数越高
-            // 调整分母以控制衰减速度，这里使用50000作为基准值
-            return Math.exp(-distance / 50000.0);
+            // 调整分母以控制衰减速度
+            return Math.exp(-distance / 30000.0);
         }
 
         private double calculateHpScore(Human human) {
@@ -447,22 +503,24 @@ public class SampleHumanDetector extends HumanDetector {
 
     private List<Human> filterRescueTargets(Collection<? extends StandardEntity> list) {
         List<Human> rescueTargets = new ArrayList<>();
+    
         for (StandardEntity next : list) {
             if (!(next instanceof Human))
                 continue;
             Human h = (Human) next;
             if (!isValidHuman(h))
                 continue;
-            if (h.getBuriedness() == 0)
+            if (h.getStandardURN() == CIVILIAN && h.getBuriedness() == 0)
                 continue;
             rescueTargets.add(h);
         }
-        // 新增：添加警察报告且damage>0的市民
+        
+        // 新增：添加警察报告且damage>0的智能体
         for (EntityID civilianID : policeReportedCivilianIds) {
             StandardEntity entity = worldInfo.getEntity(civilianID);
             if (entity instanceof Human) {
                 Human human = (Human) entity;
-                // 检查市民是否有效且damage>0
+                // 检查智能体是否有效且damage>0
                 if (isValidHuman(human) && human.isDamageDefined() && human.getDamage() > 0) {
                     // 避免重复添加
                     boolean alreadyExists = false;
@@ -474,7 +532,7 @@ public class SampleHumanDetector extends HumanDetector {
                     }
                     if (!alreadyExists) {
                         rescueTargets.add(human);
-                        logger.debug("将警察报告的市民添加到救援目标列表: " + civilianID);
+                        logger.debug("将警察报告的智能体添加到救援目标列表: " + civilianID);
                     }
                 }
             }
@@ -520,20 +578,39 @@ public class SampleHumanDetector extends HumanDetector {
             return false;
         if (!target.isDamageDefined() || target.getDamage() == 0)
             return false;
-        if (!target.isBuriednessDefined())
+        if (!target.isBuriednessDefined()) 
             return false;
-
+    
+       
         // 综合属性检查
-        if (target.getDamage() < MIN_DAMAGE_THRESHOLD && target.getHP() < MIN_HP_THRESHOLD&& target.getBuriedness() > MIN_BURIEDNESS_THRESHOLD ){
-            logger.debug("不值得救援的目标: " + target);
-            return false;
+        if (target.getDamage() < MIN_DAMAGE_THRESHOLD && target.getHP() < MIN_HP_THRESHOLD) {
+            // 对于市民，还需要检查掩埋程度
+            if (target.getStandardURN() == CIVILIAN) {
+                if (target.isBuriednessDefined() && target.getBuriedness() > MIN_BURIEDNESS_THRESHOLD) {
+                    logger.debug("不值得救援的目标: " + target);
+                    return false;
+                }
+            } else {
+                logger.debug("不值得救援的目标: " + target);
+                return false;
+            }
         }
 
         // 只有消防队才检查掩埋程度是否为0
-        if (agentInfo.me().getStandardURN() == StandardEntityURN.FIRE_BRIGADE) {
+        if (agentInfo.me().getStandardURN() == StandardEntityURN.FIRE_BRIGADE)
+        {
             if (target.getBuriedness() == 0) {
                 logger.debug("掩埋程度为0,消防队可以走了 " + target);
-            return false;
+                return false;
+            }
+        }
+
+        // 只有救护队才检查非市民掩埋度是否为0
+        if (agentInfo.me().getStandardURN() == StandardEntityURN.AMBULANCE_TEAM)
+        {
+            if (target.getBuriedness() == 0 && target.getStandardURN() != StandardEntityURN.CIVILIAN) {
+                logger.debug("非市民智能体不需要搬运 " + target);
+                return false;
             }
         }
 
@@ -541,11 +618,13 @@ public class SampleHumanDetector extends HumanDetector {
         if (position == null)
             return false;
 
-
-       if (position instanceof Building && hasBlockedEntrance((Building) position)) {
+        // 检查建筑物入口是否被阻挡
+        if (position instanceof Building && 
+            hasBlockedEntrance((Building) position)) {
             logger.debug("建筑物入口挡着了： " + target);
             return false;
         }
+        
         StandardEntityURN positionURN = position.getStandardURN();
         if (positionURN == REFUGE || positionURN == AMBULANCE_TEAM)
             return false;
@@ -553,7 +632,7 @@ public class SampleHumanDetector extends HumanDetector {
         return true;
     }
 
-        // 新增方法：检查建筑物入口是否被阻挡
+    // 新增方法：检查建筑物入口是否被阻挡
     private boolean hasBlockedEntrance(Building building) {
         for (Edge edge : getEntranceEdges(building)) {
             EntityID roadID = edge.getNeighbour();
@@ -605,17 +684,33 @@ public class SampleHumanDetector extends HumanDetector {
         return false;
     }
 
-    // 新增方法：获取建筑物内的市民列表
-    private List<Human> getCiviliansInBuilding(Building building) {
-    List<Human> civilians = new ArrayList<>();
-    Collection<StandardEntity> civiliansEntities = worldInfo.getEntitiesOfType(StandardEntityURN.CIVILIAN);
-    for (StandardEntity entity : civiliansEntities) {
-        Human human = (Human) entity;
-        if (human.isPositionDefined() && human.getPosition().equals(building.getID())) {
-            civilians.add(human);
+    // 获取建筑物内的伤员列表
+    private List<Human> getBuriedHumansInBuilding(Building building) {
+        List<Human> buriedHumansInBuilding = new ArrayList<>();
+        Collection<StandardEntity> allHumanEntities = worldInfo.getEntitiesOfType(StandardEntityURN.CIVILIAN);
+        allHumanEntities.addAll(worldInfo.getEntitiesOfType(StandardEntityURN.POLICE_FORCE));
+        allHumanEntities.addAll(worldInfo.getEntitiesOfType(StandardEntityURN.FIRE_BRIGADE));
+        allHumanEntities.addAll(worldInfo.getEntitiesOfType(StandardEntityURN.AMBULANCE_TEAM));
+        for (StandardEntity entity : allHumanEntities) {
+           if (!(entity instanceof Human))
+            continue;
+            
+            Human human = (Human) entity;
+            
+            // 检查位置是否在建筑物内
+            if (!human.isPositionDefined() || !human.getPosition().equals(building.getID()))
+                continue;
+            
+            // 对于市民，只需位置匹配就加入
+            if (human.getStandardURN() == CIVILIAN) {
+                buriedHumansInBuilding.add(human);
+            } 
+            // 对于非市民，需要位置匹配且伤害大于0才加入
+            else if (human.isDamageDefined() && human.getDamage() > 0) {
+                buriedHumansInBuilding.add(human);
+            }
         }
+        logger.debug("建筑物 " + building.getID() + " 内的伤员数量: " + buriedHumansInBuilding.size());
+        return buriedHumansInBuilding;
     }
-    logger.debug("建筑物 " + building.getID() + " 内的市民数量: " + civilians.size());
-    return civilians;
-}
 }

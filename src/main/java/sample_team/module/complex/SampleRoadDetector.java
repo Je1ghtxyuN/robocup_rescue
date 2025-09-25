@@ -1,8 +1,10 @@
 package sample_team.module.complex;
 
+import static rescuecore2.standard.entities.StandardEntityURN.REFUGE;
 import adf.core.agent.communication.MessageManager;
 import adf.core.agent.communication.standard.bundle.information.MessageCivilian;
 import adf.core.agent.communication.standard.bundle.information.MessageRoad;
+import adf.core.component.module.algorithm.PathPlanning;
 import adf.core.agent.develop.DevelopData;
 import adf.core.agent.info.AgentInfo;
 import adf.core.agent.info.ScenarioInfo;
@@ -18,6 +20,9 @@ import adf.core.debug.DefaultLogger;
 
 import java.util.*;
 import java.util.stream.Collectors;
+
+import org.apache.log4j.Logger;
+
 import java.awt.geom.Line2D;
 import java.awt.geom.Area;
 import java.awt.Shape;
@@ -28,6 +33,8 @@ public class SampleRoadDetector extends RoadDetector {
     private Set<EntityID> sentCivilianMessages = new HashSet<>();
 
     private SampleSearch sampleSearch;
+    private PathPlanning pathPlanning;
+    private Logger logger;
 
     // 初始清理避难所任务
     private static final int INITIAL_PHASE_DURATION = 30; // 开局阶段持续时间（秒）
@@ -46,10 +53,10 @@ public class SampleRoadDetector extends RoadDetector {
     private static final int MIN_BURIEDNESS_THRESHOLD = 30;
 
     // 权重配置
-    private static final double DISTANCE_WEIGHT = 0.5;
-    private static final double HP_WEIGHT = 0.2;
-    private static final double BURIEDNESS_WEIGHT = 0.15;
-    private static final double DAMAGE_WEIGHT = 0.15;
+    private static final double DISTANCE_WEIGHT = 0.3;
+    private static final double HP_WEIGHT = 0.4;
+    private static final double BURIEDNESS_WEIGHT = 0.1;
+    private static final double DAMAGE_WEIGHT = 0.2;
 
     // 当前锁定的目标及锁定时间
     private EntityID lockedTarget = null;
@@ -91,12 +98,17 @@ public class SampleRoadDetector extends RoadDetector {
     public SampleRoadDetector(AgentInfo ai, WorldInfo wi, ScenarioInfo si,
                             ModuleManager moduleManager, DevelopData developData) {
         super(ai, wi, si, moduleManager, developData);
+        logger = DefaultLogger.getLogger(agentInfo.me());
         this.clustering = moduleManager.getModule(
             "SampleRoadDetector.Clustering",
             "sample_team.module.algorithm.KMeansClustering");
         this.sampleSearch = moduleManager.getModule(
             "SampleSearch",
             "sample_team.module.complex.SampleSearch");    
+        this.pathPlanning = moduleManager.getModule(
+            "SampleRoadDetector.PathPlanning",
+            "adf.impl.module.algorithm.AStarPathPlanning");
+        registerModule(this.pathPlanning); 
     }
 
     @Override
@@ -250,6 +262,35 @@ public class SampleRoadDetector extends RoadDetector {
     @Override
     public SampleRoadDetector calc() {
 
+         // 首先检查自身damage是否大于0
+        Human self = (Human) agentInfo.me();
+        if (self.isDamageDefined() && self.getDamage() > 0) {
+            // 自身受伤，优先前往最近的避难所
+            EntityID agentPosition = agentInfo.getPosition();
+            Collection<EntityID> refugeIDs = this.worldInfo.getEntityIDsOfType(REFUGE);
+            List<EntityID> shortestPath = null;
+            EntityID nearestRefuge = null;
+            
+            // 遍历所有避难所，找到路径最短的
+            for (EntityID refugeID : refugeIDs) {
+                pathPlanning.setFrom(agentPosition);
+                pathPlanning.setDestination(refugeID);
+                List<EntityID> path = pathPlanning.calc().getResult();
+                if (path != null && path.size() > 0) {
+                    if (shortestPath == null || path.size() < shortestPath.size()) {
+                        shortestPath = path;
+                        nearestRefuge = refugeID;
+                    }
+                }
+            }
+            
+            if (nearestRefuge != null) {
+                this.result = nearestRefuge;
+                logger.debug("自身受伤，前往最近的避难所: " + nearestRefuge);
+                return this;
+            }
+        }
+
         // 开局阶段逻辑 - 优先处理分配的避难所
         if (agentInfo.getTime() < INITIAL_PHASE_DURATION && !initialTaskCompleted) {
             // 如果还没有分配初始避难所，尝试分配一个
@@ -361,11 +402,14 @@ public class SampleRoadDetector extends RoadDetector {
 
     // 寻找市民目标
     private EntityID findCivilianTarget() {
-        // 1. 获取所有可见人类实体
-        List<Human> rescueTargets = filterRescueTargets(
-            worldInfo.getEntitiesOfType(StandardEntityURN.CIVILIAN));
+        // 1. 获取所有需要救援的人类实体（包括各种智能体类型）
+        List<Human> rescueTargets = new ArrayList<>();
+        rescueTargets.addAll(filterRescueTargets(worldInfo.getEntitiesOfType(StandardEntityURN.CIVILIAN)));
+        rescueTargets.addAll(filterRescueTargets(worldInfo.getEntitiesOfType(StandardEntityURN.POLICE_FORCE)));
+        rescueTargets.addAll(filterRescueTargets(worldInfo.getEntitiesOfType(StandardEntityURN.FIRE_BRIGADE)));
+        rescueTargets.addAll(filterRescueTargets(worldInfo.getEntitiesOfType(StandardEntityURN.AMBULANCE_TEAM)));
         
-        // 过滤掉位于已搜索建筑中的平民
+        // 过滤掉位于已搜索建筑中的目标
         if (sampleSearch != null) {
             Set<EntityID> searchedBuildings = sampleSearch.getSearchedBuildings();
             rescueTargets.removeIf(human -> {
@@ -392,8 +436,8 @@ public class SampleRoadDetector extends RoadDetector {
             if (!contactedHumans.contains(humanId) && !isReservedByOtherPolice(humanId)) {
                 // 保留这个目标
                 reserveTarget(humanId);
-                this.currentTargetHuman = humanId; // 设置当前目标伤员
-                return human.getPosition(); // 返回市民所在位置
+                this.currentTargetHuman = humanId; // 设置当前目标
+                return human.getPosition(); // 返回目标所在位置
             }
         }
         
@@ -409,6 +453,7 @@ public class SampleRoadDetector extends RoadDetector {
         
         return null;
     }
+
 
     // 检查目标是否被其他警察保留
     private boolean isReservedByOtherPolice(EntityID humanId) {
@@ -813,16 +858,36 @@ public class SampleRoadDetector extends RoadDetector {
         if (!target.isHPDefined() || target.getHP() == 0) return false;
         if (!target.isPositionDefined()) return false;
         if (!target.isDamageDefined()) return false;
-        if (!target.isBuriednessDefined()) return false;
+        
+        // 修改点：对于非市民智能体，如果掩埋值为零，则无效（已被救出）
+        if (target.getStandardURN() != StandardEntityURN.CIVILIAN) {
+            if (target.isBuriednessDefined() && target.getBuriedness() == 0) {
+                return false; // 非市民智能体已被救出，不需要救援
+            }
+        } else {
+            // 对于市民，如果掩埋值未定义，无效
+            if (!target.isBuriednessDefined()) {
+                return false;
+            }
+        }
 
         // 综合属性检查
         if (target.getDamage() < MIN_DAMAGE_THRESHOLD && 
-            target.getHP() < MIN_HP_THRESHOLD && 
-            target.getBuriedness() > MIN_BURIEDNESS_THRESHOLD) {
-            return false;
+            target.getHP() < MIN_HP_THRESHOLD) {
+            // 对于市民，还需要检查掩埋程度
+            if (target.getStandardURN() == StandardEntityURN.CIVILIAN) {
+                if (target.isBuriednessDefined() && target.getBuriedness() > MIN_BURIEDNESS_THRESHOLD) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
         }
 
-        if (target.getBuriedness() == 0) return false;
+        // 对于市民，检查掩埋程度是否为0
+        if (target.getStandardURN() == StandardEntityURN.CIVILIAN && target.getBuriedness() == 0) {
+            return false;
+        }
 
         StandardEntity position = worldInfo.getPosition(target);
         if (position == null) return false;
@@ -867,7 +932,7 @@ public class SampleRoadDetector extends RoadDetector {
 
         private double calculateDistanceScore(Human human) {
             int distance = this.worldInfo.getDistance(this.reference, human);
-            return Math.exp(-distance / 50000.0);
+            return Math.exp(-distance / 30000.0);
         }
 
         private double calculateHpScore(Human human) {

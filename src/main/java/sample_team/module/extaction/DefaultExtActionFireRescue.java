@@ -143,8 +143,8 @@ public class DefaultExtActionFireRescue extends ExtAction {
     // 检查上次救援的市民是否掩埋度变为0
     if (lastRescuedCivilian != null) {
         StandardEntity entity = worldInfo.getEntity(lastRescuedCivilian);
-        if (entity instanceof Human) {
-            Human human = (Human) entity;
+        if (entity instanceof Civilian) {
+            Civilian human = (Civilian) entity;
             if (human.isBuriednessDefined() && human.getBuriedness() == 0) {
                 // 发送消息给救护队
                 if (messageManager != null) {
@@ -155,7 +155,10 @@ public class DefaultExtActionFireRescue extends ExtAction {
                 }
                 lastRescuedCivilian = null; // 重置
             }
-        }
+        }else {
+            // 如果lastRescuedCivilian不是市民，则重置为null，避免后续错误
+            lastRescuedCivilian = null;
+          }
     }
 
     if (this.needRest(agent)) {
@@ -190,8 +193,14 @@ public class DefaultExtActionFireRescue extends ExtAction {
       EntityID targetPosition = human.getPosition();
       if (agentPosition.getValue() == targetPosition.getValue()) {
         if (human.isBuriednessDefined() && human.getBuriedness() > 0) {
-          this.lastRescuedCivilian = human.getID();
-          logger.debug("消防员开始救援市民，记录目标: " + this.lastRescuedCivilian);
+          // 只有市民才记录，非市民不记录
+          if (human instanceof Civilian) {
+            this.lastRescuedCivilian = human.getID();
+            logger.debug("消防员开始救援市民，记录目标: " + this.lastRescuedCivilian);
+          } else {
+            // 对于非市民，将lastRescuedCivilian设为null，避免后续检查出错
+            this.lastRescuedCivilian = null;
+          }
           return new ActionRescue(human);
         }
       } else {
