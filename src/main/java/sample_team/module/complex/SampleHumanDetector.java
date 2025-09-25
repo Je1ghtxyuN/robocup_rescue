@@ -72,13 +72,16 @@ public class SampleHumanDetector extends HumanDetector {
 
     // 存储需要搬运的市民队列
     private Queue<EntityID> rescuedCivilians = new LinkedList<>();
-    // 新增：存储警察报告的市民ID（用于去重）
+    // 存储警察报告的市民ID（用于去重）
     private Set<EntityID> policeReportedCivilianIds = new HashSet<>();
 
     // 存储最近选择的目标历史，用于协调多个消防员
     private static final Map<EntityID, Long> recentlyChosenTargets = new ConcurrentHashMap<>();
     private static final long TARGET_COOLDOWN = 20; // 目标冷却时间（时间步）
     private final Random random = new Random(); // 每个实例有自己的随机数生成器
+
+    // +++ 新增：目标锁定字段 +++
+    private EntityID lockedTarget = null; // 被锁定的目标ID
 
 
     public SampleHumanDetector(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager, DevelopData developData) {
@@ -245,6 +248,30 @@ public class SampleHumanDetector extends HumanDetector {
 
     @Override
     public HumanDetector calc() {
+
+        // +++ 目标锁定机制：首要检查 - 如果已锁定目标且仍然有效，则坚持该目标 +++
+        if (lockedTarget != null) {
+            StandardEntity targetEntity = worldInfo.getEntity(lockedTarget);
+            if (targetEntity instanceof Human) {
+                Human lockedHuman = (Human) targetEntity;
+                if (isValidHuman(lockedHuman)) {
+                    this.result = lockedTarget;
+                    logger.debug("目标锁定中，坚持目标: " + lockedTarget);
+                    return this;
+                } else {
+                    // 锁定的目标已失效，清除锁定
+                    logger.debug("锁定的目标已失效，清除锁定: " + lockedTarget);
+                    lockedTarget = null;
+                    this.result = null;
+                }
+            } else {
+                // 实体不存在或不是Human，清除锁定
+                logger.debug("锁定的目标不存在或无效，清除锁定: " + lockedTarget);
+                lockedTarget = null;
+                this.result = null;
+            }
+        }
+        
         // 首先检查自身damage是否大于0
         Human self = (Human) agentInfo.me();
         if (self.isDamageDefined() && self.getDamage() > 0) {
