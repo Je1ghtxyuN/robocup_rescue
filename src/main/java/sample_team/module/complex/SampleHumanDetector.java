@@ -218,32 +218,49 @@ public class SampleHumanDetector extends HumanDetector {
             currentTime - entry.getValue() > TARGET_COOLDOWN);
     }
 
-    // 检查是否被卡住，如果卡住太久就发送求助信息给警察
-    private void checkStuckAndRequestHelp(MessageManager messageManager) {
-        EntityID currentPosition = agentInfo.getPosition();
-        logger.debug("上一次位置: " + lastPosition + " ,当前位置："+currentPosition);
-        // 检查是否移动了
-        if (lastPosition != null && lastPosition.equals(currentPosition)) {
-            stuckCount++;
-            logger.debug("智能体被卡住: " + stuckCount + " 次");
-        } else {
-            if (stuckCount > 0) {
-                logger.debug("智能体重新开始移动，重置计数器");
-            }
-            stuckCount = 0;
+// 检查是否被卡住，如果卡住太久就发送求助信息给警察
+private void checkStuckAndRequestHelp(MessageManager messageManager) {
+    EntityID currentPosition = agentInfo.getPosition();
+    logger.debug("上一次位置: " + lastPosition + " ,当前位置："+currentPosition);
+    
+    // 检查是否移动了
+    if (lastPosition != null && lastPosition.equals(currentPosition)) {
+        stuckCount++;
+        logger.debug("智能体被卡住: " + stuckCount + " 次");
+    } else {
+        if (stuckCount > 0) {
+            logger.debug("智能体重新开始移动，重置计数器");
         }
-        
-        // 如果被卡住超过2个时间步，就发送道路信息给警察求助
-        if (stuckCount >= 2) {
-            sendRoadHelpRequest(messageManager, currentPosition);
-            stuckCount = 0;  // 重置计数器，避免重复发送
-        }
-        
-        lastPosition = currentPosition;
-        
-        // 清理过期的请求记录
-        cleanupOldRequests();
+        stuckCount = 0;
     }
+    
+    // 如果是救护队且正在运输伤员，降低卡住阈值
+    int threshold = 2; // 默认阈值
+    boolean isTransporting = false;
+    
+    if (agentInfo.me().getStandardURN() == StandardEntityURN.AMBULANCE_TEAM && 
+        ambulanceState == AmbulanceState.TRANSPORTING) {
+        threshold = 1; // 运输状态下阈值降低为1
+        isTransporting = true;
+        logger.debug("运输伤员中，降低卡住检测阈值");
+    }
+    
+    // 如果被卡住超过阈值时间步，就发送道路信息给警察求助
+    if (stuckCount >= threshold) {
+        if (isTransporting) {
+            logger.debug("运输伤员时被卡住，发送求助信息给警察");
+        } else {
+            logger.debug("被卡住，发送求助信息给警察");
+        }
+        sendRoadHelpRequest(messageManager, currentPosition);
+        stuckCount = 0;  // 重置计数器，避免重复发送
+    }
+    
+    lastPosition = currentPosition;
+    
+    // 清理过期的请求记录
+    cleanupOldRequests();
+}
     
     // 清理过期的请求记录
     private void cleanupOldRequests() {
@@ -539,16 +556,19 @@ public class SampleHumanDetector extends HumanDetector {
         allHumanEntities.addAll(worldInfo.getEntitiesOfType(StandardEntityURN.FIRE_BRIGADE));
         allHumanEntities.addAll(worldInfo.getEntitiesOfType(StandardEntityURN.AMBULANCE_TEAM));
 
-        // 前50回合只能以市民警察消防员为目标
-        if (agentInfo.getTime() <= 50) {
-            // 过滤掉非市民实体
-            allHumanEntities.removeIf(entity -> {
-                if (entity instanceof Human) {
-                    return (((Human) entity).getStandardURN() != AMBULANCE_TEAM && ((Human) entity).getStandardURN() != CIVILIAN);
-                }
-                return true;
-            });
-        }  
+// 前50回合只能以市民和警察为目标（排除救护队）
+if (agentInfo.getTime() <= 50) {
+    // 过滤掉非市民和非警察实体
+    allHumanEntities.removeIf(entity -> {
+        if (entity instanceof Human) {
+            Human human = (Human) entity;
+            StandardEntityURN urn = human.getStandardURN();
+            // 只保留市民和警察
+            return !(urn == CIVILIAN || urn == StandardEntityURN.POLICE_FORCE);
+        }
+        return true;
+    });
+} 
 
         //处理全局目标
         List<Human> rescueTargets = filterRescueTargets(allHumanEntities);
@@ -795,10 +815,10 @@ public class SampleHumanDetector extends HumanDetector {
             return false;
         }
             
-        if (!target.isDamageDefined() || target.getDamage() == 0){
-            logger.debug("无效目标: " + target + " 伤害未定义或为0");
-            return false;
-        }
+        // if (!target.isDamageDefined() || target.getDamage() == 0){
+        //     logger.debug("无效目标: " + target + " 伤害未定义或为0");
+        //     return false;
+        // }
         if (!target.isBuriednessDefined()) {
             logger.debug("无效目标: " + target + " 掩埋值未定义");
             return false;
