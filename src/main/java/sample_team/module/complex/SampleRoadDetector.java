@@ -89,6 +89,8 @@ public class SampleRoadDetector extends RoadDetector {
     private Set<EntityID> contactedHumans = new HashSet<>();
     // 当前目标伤员
     private EntityID currentTargetHuman = null;
+    // 修改：全局初始避难所分配记录（记录每个避难所已被分配的警察数量 <避难所ID, 分配次数>）
+    private static final Map<EntityID, Integer> globallyAssignedRefuges = new HashMap<>();
     
     // 防止警察聚集的共享状态
     private static final Map<EntityID, EntityID> reservedTargets = new HashMap<>();
@@ -131,7 +133,6 @@ public class SampleRoadDetector extends RoadDetector {
 
         // 检查初始任务是否完成
         if (initialRefugeTarget != null && !initialTaskCompleted) {
-            // 如果当前位置就是分配的避难所，标记任务完成
             if (agentInfo.getPosition().equals(initialRefugeTarget)) {
                 initialTaskCompleted = true;
                 DefaultLogger.getLogger(agentInfo.me()).info("警察已完成初始避难所清理任务: " + initialRefugeTarget);
@@ -262,7 +263,7 @@ public class SampleRoadDetector extends RoadDetector {
     @Override
     public SampleRoadDetector calc() {
 
-         // 首先检查自身damage是否大于0
+        // 首先检查自身damage是否大于0
         Human self = (Human) agentInfo.me();
         if (self.isDamageDefined() && self.getDamage() > 0) {
             // 自身受伤，优先前往最近的避难所
@@ -381,23 +382,39 @@ public class SampleRoadDetector extends RoadDetector {
     // 添加分配初始避难所的方法
     private EntityID assignInitialRefuge() {
         // 获取所有避难所
-        Collection<StandardEntity> refuges = worldInfo.getEntitiesOfType(StandardEntityURN.REFUGE);
+        Collection<StandardEntity> allRefuges = worldInfo.getEntitiesOfType(StandardEntityURN.REFUGE);
         
-        // 使用警察ID的哈希值来选择避难所，确保分配的一致性
-        int policeIdHash = agentInfo.getID().getValue();
-        int refugeIndex = policeIdHash % refuges.size();
-        
-        // 选择对应的避难所
-        int i = 0;
-        for (StandardEntity refuge : refuges) {
-            if (i == refugeIndex) {
-                DefaultLogger.getLogger(agentInfo.me()).info("警察被分配到避难所: " + refuge.getID());
-                return refuge.getID();
-            }
-            i++;
+        // 找出尚未被分配满2个警察的避难所
+        List<StandardEntity> availableRefuges = allRefuges.stream()
+                .filter(refuge -> {
+                    Integer assignedCount = globallyAssignedRefuges.get(refuge.getID());
+                    // 如果该避难所尚未被分配过，或者分配次数少于2次，则视为可用
+                    return assignedCount == null || assignedCount < 2;
+                })
+                .collect(Collectors.toList());
+
+        // 如果没有可用的避难所，返回null，表示本警察不执行初始任务
+        if (availableRefuges.isEmpty()) {
+            DefaultLogger.getLogger(agentInfo.me()).info("所有避难所已分配满2个警察，本警察跳过初始任务。");
+            this.initialTaskCompleted = true; // 直接标记为已完成，跳过初始阶段
+            return null;
         }
+
+        // 使用警察ID的哈希值从可用避难所中选择一个，确保分配的一致性
+        int policeIdHash = agentInfo.getID().getValue();
+        int refugeIndex = policeIdHash % availableRefuges.size();
+
+        StandardEntity selectedRefuge = availableRefuges.get(refugeIndex);
+        EntityID selectedRefugeID = selectedRefuge.getID();
+
+        // 在全局记录中更新该避难所的分配次数
+        int currentAssignments = globallyAssignedRefuges.getOrDefault(selectedRefugeID, 0);
+        globallyAssignedRefuges.put(selectedRefugeID, currentAssignments + 1);
         
-        return null;
+        DefaultLogger.getLogger(agentInfo.me()).info("警察被分配到避难所: " + selectedRefugeID + 
+            " (当前分配数: " + (currentAssignments + 1) + "/2)");
+
+        return selectedRefugeID;
     }
 
     // 寻找市民目标
