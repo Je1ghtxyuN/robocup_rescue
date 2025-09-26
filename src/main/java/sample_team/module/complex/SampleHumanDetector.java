@@ -80,6 +80,17 @@ public class SampleHumanDetector extends HumanDetector {
     private static final long TARGET_COOLDOWN = 20; // 目标冷却时间（时间步）
     private final Random random = new Random(); // 每个实例有自己的随机数生成器
 
+    // 救护队状态机相关字段
+    private enum AmbulanceState {
+        IDLE,           // 空闲状态
+        MOVING_TO_TARGET, // 正在前往目标
+        TRANSPORTING    // 正在运输伤员到避难所
+    }
+    private AmbulanceState ambulanceState = AmbulanceState.IDLE;
+    private EntityID currentMissionTarget = null; // 当前任务目标
+    private EntityID currentRefugeTarget = null;  // 当前避难所目标
+    private EntityID ambulanceLockedTarget = null; // 救护队锁定的目标
+
 
     public SampleHumanDetector(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager, DevelopData developData) {
         super(ai, wi, si, moduleManager, developData);
@@ -109,6 +120,74 @@ public class SampleHumanDetector extends HumanDetector {
         // 新增：处理来自警察的市民消息
         processPoliceCivilianMessages(messageManager);
 
+        // 新增：救护队状态更新逻辑
+        if (agentInfo.me().getStandardURN() == StandardEntityURN.AMBULANCE_TEAM) {
+            // 检查是否已到达任务目标并装载伤员
+            if (ambulanceState == AmbulanceState.MOVING_TO_TARGET && 
+                currentMissionTarget != null && 
+                currentMissionTarget.equals(agentInfo.getPosition())) {
+                // 已到达目标位置，检查是否装载了伤员
+                Human transportHuman = this.agentInfo.someoneOnBoard();
+                if (transportHuman != null) {
+                    // 已装载伤员，寻找最近的避难所
+                    EntityID agentPosition = agentInfo.getPosition();
+                    Collection<EntityID> refugeIDs = this.worldInfo.getEntityIDsOfType(REFUGE);
+                    List<EntityID> shortestPath = null;
+                    EntityID nearestRefuge = null;
+                    
+                    for (EntityID refugeID : refugeIDs) {
+                        pathPlanning.setFrom(agentPosition);
+                        pathPlanning.setDestination(refugeID);
+                        List<EntityID> path = pathPlanning.calc().getResult();
+                        if (path != null && path.size() > 0) {
+                            if (shortestPath == null || path.size() < shortestPath.size()) {
+                                shortestPath = path;
+                                nearestRefuge = refugeID;
+                            }
+                        }
+                    }
+                    
+                    if (nearestRefuge != null) {
+                        currentRefugeTarget = nearestRefuge;
+                        ambulanceState = AmbulanceState.TRANSPORTING;
+                        logger.debug("已装载伤员，前往避难所: " + nearestRefuge);
+                    }
+                }
+            }
+            
+            // 检查是否已到达避难所并完成运输
+            if (ambulanceState == AmbulanceState.TRANSPORTING && 
+                currentRefugeTarget != null && 
+                currentRefugeTarget.equals(agentInfo.getPosition())) {
+                logger.debug("已完成运输任务，到达避难所: " + currentRefugeTarget);
+                
+                // 完全重置状态
+                ambulanceState = AmbulanceState.IDLE;
+                currentMissionTarget = null;
+                currentRefugeTarget = null;
+                ambulanceLockedTarget = null;
+                
+                // 新增：尝试获取下一个任务
+                if (!rescuedCivilians.isEmpty()) {
+                    EntityID nextCivilian = rescuedCivilians.poll();
+                    StandardEntity entity = worldInfo.getEntity(nextCivilian);
+                    if (entity instanceof Human) {
+                        Human human = (Human) entity;
+                        if (isValidHuman(human)) {
+                            // 锁定新目标
+                            ambulanceLockedTarget = nextCivilian;
+                            
+                            // 设置任务状态
+                            ambulanceState = AmbulanceState.MOVING_TO_TARGET;
+                            currentMissionTarget = nextCivilian;
+                            this.result = nextCivilian;
+                            logger.debug("救护队自动获取下一个任务: " + nextCivilian);
+                        }
+                    }
+                }
+            }
+        }
+        
         return this;
     }
 
@@ -233,9 +312,14 @@ public class SampleHumanDetector extends HumanDetector {
                     if (shouldAdd) {
                         // 避免重复添加
                         if (!rescuedCivilians.contains(civilianID)) {
+                        // 只有当救护队处于空闲状态时才接受新任务
+                        if (ambulanceState == AmbulanceState.IDLE) {
                             rescuedCivilians.add(civilianID);
                             logger.debug("收到消防队救援消息，智能体 " + civilianID + " 需要救援");
+                        } else {
+                            logger.debug("救护队正在执行任务，忽略消防队消息: " + civilianID);
                         }
+                    }
                     }
                 }
             }
@@ -245,6 +329,13 @@ public class SampleHumanDetector extends HumanDetector {
 
     @Override
     public HumanDetector calc() {
+        if (agentInfo.me().getStandardURN() == StandardEntityURN.AMBULANCE_TEAM) {
+        logger.debug("救护队状态: " + ambulanceState + 
+                    ", 任务目标: " + currentMissionTarget + 
+                    ", 避难所目标: " + currentRefugeTarget + 
+                    ", 全局锁定目标: " + ambulanceLockedTarget);
+    }
+
         // 首先检查自身damage是否大于0
         Human self = (Human) agentInfo.me();
         if (self.isDamageDefined() && self.getDamage() > 0) {
@@ -269,8 +360,103 @@ public class SampleHumanDetector extends HumanDetector {
             
             if (nearestRefuge != null) {
                 this.result = nearestRefuge;
+                ambulanceState = AmbulanceState.MOVING_TO_TARGET;
+                currentRefugeTarget = nearestRefuge;
                 logger.debug("自身受伤，前往最近的避难所: " + nearestRefuge);
                 return this;
+            }
+        }
+
+        // 救护队特殊处理逻辑
+        if (agentInfo.me().getStandardURN() == StandardEntityURN.AMBULANCE_TEAM) {
+            // 检查是否正在运输伤员
+            Human transportHuman = this.agentInfo.someoneOnBoard();
+            if (transportHuman != null) {
+                logger.debug("正在运输伤员: " + transportHuman);
+                
+                // 如果已经有避难所目标，继续前往
+                if (currentRefugeTarget != null) {
+                    this.result = currentRefugeTarget;
+                    ambulanceState = AmbulanceState.TRANSPORTING;
+                    return this;
+                }
+                
+                // 如果没有避难所目标，寻找最近的避难所
+                EntityID agentPosition = agentInfo.getPosition();
+                Collection<EntityID> refugeIDs = this.worldInfo.getEntityIDsOfType(REFUGE);
+                List<EntityID> shortestPath = null;
+                EntityID nearestRefuge = null;
+                
+                for (EntityID refugeID : refugeIDs) {
+                    pathPlanning.setFrom(agentPosition);
+                    pathPlanning.setDestination(refugeID);
+                    List<EntityID> path = pathPlanning.calc().getResult();
+                    if (path != null && path.size() > 0) {
+                        if (shortestPath == null || path.size() < shortestPath.size()) {
+                            shortestPath = path;
+                            nearestRefuge = refugeID;
+                        }
+                    }
+                }
+                
+                if (nearestRefuge != null) {
+                    this.result = nearestRefuge;
+                    ambulanceState = AmbulanceState.TRANSPORTING;
+                    currentRefugeTarget = nearestRefuge;
+                    logger.debug("前往避难所: " + nearestRefuge);
+                    return this;
+                }
+            }
+            
+            // 如果当前有任务正在进行，坚持完成任务
+            if (ambulanceState != AmbulanceState.IDLE && currentMissionTarget != null) {
+                // 检查任务目标是否仍然有效
+                StandardEntity targetEntity = worldInfo.getEntity(currentMissionTarget);
+                if (targetEntity instanceof Human) {
+                    Human targetHuman = (Human) targetEntity;
+                    
+                    if (isValidHuman(targetHuman)) {
+                        // 继续执行当前任务
+                        this.result = currentMissionTarget;
+                        ambulanceState = AmbulanceState.MOVING_TO_TARGET;
+                        return this;
+                    } else {
+                        // 目标无效，重置状态
+                        logger.debug("目标已无效，重置状态: " + currentMissionTarget);
+                        ambulanceState = AmbulanceState.IDLE;
+                        currentMissionTarget = null;
+                        currentRefugeTarget = null;
+                        ambulanceLockedTarget = null;
+                    }
+                } else {
+                    // 目标实体不存在，重置状态
+                    logger.debug("目标实体不存在，重置状态: " + currentMissionTarget);
+                    ambulanceState = AmbulanceState.IDLE;
+                    currentMissionTarget = null;
+                    currentRefugeTarget = null;
+                    ambulanceLockedTarget = null;
+                }
+            }
+            
+            // 处理消防队请求（掩埋度为0的市民）
+            if (ambulanceState == AmbulanceState.IDLE && !rescuedCivilians.isEmpty()) {
+                EntityID nextCivilian = rescuedCivilians.poll();
+                StandardEntity entity = worldInfo.getEntity(nextCivilian);
+                if (entity instanceof Human) {
+                    Human human = (Human) entity;
+                    if (isValidHuman(human) && human.isBuriednessDefined() && human.getBuriedness() == 0) {
+                        // 锁定这个新目标
+                        ambulanceLockedTarget = nextCivilian;
+                        
+                        // 设置任务状态
+                        ambulanceState = AmbulanceState.MOVING_TO_TARGET;
+                        currentMissionTarget = nextCivilian;
+                        
+                        this.result = nextCivilian;
+                        logger.debug("救护队锁定新目标（掩埋度为0）: " + nextCivilian);
+                        return this;
+                    }
+                }
             }
         }
 
@@ -299,6 +485,10 @@ public class SampleHumanDetector extends HumanDetector {
                 Human human = (Human) entity;
                 if (isValidHuman(human) && human.isBuriednessDefined() && human.getBuriedness() == 0) {
                     this.result = nextCivilian;
+                    // 设置状态
+                    ambulanceState = AmbulanceState.MOVING_TO_TARGET;
+                    currentMissionTarget = nextCivilian;
+                    ambulanceLockedTarget = nextCivilian;
                     logger.debug("选择来自消防队消息的市民: " + nextCivilian);
                 }
             }
@@ -306,6 +496,14 @@ public class SampleHumanDetector extends HumanDetector {
 
         if (this.result == null) {
             this.result = calcTarget();
+            
+            // 如果是救护队且找到了新目标，则设置状态
+            if (agentInfo.me().getStandardURN() == StandardEntityURN.AMBULANCE_TEAM && 
+                this.result != null) {
+                ambulanceLockedTarget = this.result;
+                ambulanceState = AmbulanceState.MOVING_TO_TARGET;
+                currentMissionTarget = this.result;
+            }
         }
         return this;
     }
