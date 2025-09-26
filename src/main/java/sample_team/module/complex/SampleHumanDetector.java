@@ -37,7 +37,7 @@ import java.awt.geom.Line2D;
 import java.awt.geom.Area;
 import java.awt.Shape;
 
-import adf.core.agent.communication.standard.bundle.information.MessageCivilian; // 新增import
+import adf.core.agent.communication.standard.bundle.information.MessageCivilian;
 import java.util.LinkedList;
 import java.util.Queue; 
 import java.util.Random;
@@ -72,7 +72,7 @@ public class SampleHumanDetector extends HumanDetector {
 
     // 存储需要搬运的市民队列
     private Queue<EntityID> rescuedCivilians = new LinkedList<>();
-    // 新增：存储警察报告的市民ID（用于去重）
+    // 存储警察报告的市民ID（用于去重）
     private Set<EntityID> policeReportedCivilianIds = new HashSet<>();
 
     // 存储最近选择的目标历史，用于协调多个消防员
@@ -108,19 +108,25 @@ public class SampleHumanDetector extends HumanDetector {
     public HumanDetector updateInfo(MessageManager messageManager) {
         logger.debug("Time:" + agentInfo.getTime());
         super.updateInfo(messageManager);
+
+        // 添加当前目标日志
+        if (agentInfo.me().getStandardURN() == StandardEntityURN.FIRE_BRIGADE) {
+            logger.debug("消防队当前目标: " + this.result);
+        }
+    
         // 检查是否被卡住并发送求助信息
         checkStuckAndRequestHelp(messageManager);
 
-        // 新增：清理过期的目标选择记录
+        // 清理过期的目标选择记录
         cleanupOldTargetChoices();
 
         // 处理来自消防队的市民消息和来自警察的市民消息
         processFireRescueMessages(messageManager);
 
-        // 新增：处理来自警察的市民消息
+        // 处理来自警察的市民消息
         processPoliceCivilianMessages(messageManager);
 
-        // 新增：救护队状态更新逻辑
+        // 救护队状态更新逻辑
         if (agentInfo.me().getStandardURN() == StandardEntityURN.AMBULANCE_TEAM) {
             // 检查是否已到达任务目标并装载伤员
             if (ambulanceState == AmbulanceState.MOVING_TO_TARGET && 
@@ -167,7 +173,7 @@ public class SampleHumanDetector extends HumanDetector {
                 currentRefugeTarget = null;
                 ambulanceLockedTarget = null;
                 
-                // 新增：尝试获取下一个任务
+                // 尝试获取下一个任务
                 if (!rescuedCivilians.isEmpty()) {
                     EntityID nextCivilian = rescuedCivilians.poll();
                     StandardEntity entity = worldInfo.getEntity(nextCivilian);
@@ -192,7 +198,7 @@ public class SampleHumanDetector extends HumanDetector {
     }
 
     /**
-     * 新增：处理来自警察的市民消息
+     * 处理来自警察的市民消息
      */
     private void processPoliceCivilianMessages(MessageManager messageManager) {
         // 获取收到的MessageCivilian消息
@@ -532,7 +538,17 @@ public class SampleHumanDetector extends HumanDetector {
         allHumanEntities.addAll(worldInfo.getEntitiesOfType(StandardEntityURN.POLICE_FORCE));
         allHumanEntities.addAll(worldInfo.getEntitiesOfType(StandardEntityURN.FIRE_BRIGADE));
         allHumanEntities.addAll(worldInfo.getEntitiesOfType(StandardEntityURN.AMBULANCE_TEAM));
-        
+
+        // 前50回合只能以市民警察消防员为目标
+        if (agentInfo.getTime() <= 50) {
+            // 过滤掉非市民实体
+            allHumanEntities.removeIf(entity -> {
+                if (entity instanceof Human) {
+                    return (((Human) entity).getStandardURN() != AMBULANCE_TEAM && ((Human) entity).getStandardURN() != CIVILIAN);
+                }
+                return true;
+            });
+        }  
 
         //处理全局目标
         List<Human> rescueTargets = filterRescueTargets(allHumanEntities);
@@ -553,7 +569,7 @@ public class SampleHumanDetector extends HumanDetector {
         return selected.getID();
     }
 
-    // 新增方法：协调目标选择，避免所有消防员选择同一个目标
+    // 协调目标选择，避免所有消防员选择同一个目标
     private Human coordinatedTargetSelection(List<Human> sortedTargets) {
         if (sortedTargets.isEmpty()) {
             return null;
@@ -713,7 +729,7 @@ public class SampleHumanDetector extends HumanDetector {
             rescueTargets.add(h);
         }
         
-        // 新增：添加警察报告且damage>0的智能体
+        // 添加警察报告且damage>0的智能体
         for (EntityID civilianID : policeReportedCivilianIds) {
             StandardEntity entity = worldInfo.getEntity(civilianID);
             if (entity instanceof Human) {
@@ -761,10 +777,12 @@ public class SampleHumanDetector extends HumanDetector {
     }
 
     private boolean isValidHuman(StandardEntity entity) {
-        if (entity == null)
+        if (entity == null){
             return false;
-        if (!(entity instanceof Human))
+        }
+        if (!(entity instanceof Human)){
             return false;
+        }
 
         Human target = (Human) entity;
         if (!target.isHPDefined() || target.getHP() == 0){        
@@ -772,12 +790,19 @@ public class SampleHumanDetector extends HumanDetector {
             return false;
         }
 
-        if (!target.isPositionDefined())
+        if (!target.isPositionDefined()){
+            logger.debug("无效目标: " + target + " 位置未定义");
             return false;
-        if (!target.isDamageDefined() || target.getDamage() == 0)
+        }
+            
+        if (!target.isDamageDefined() || target.getDamage() == 0){
+            logger.debug("无效目标: " + target + " 伤害未定义或为0");
             return false;
-        if (!target.isBuriednessDefined()) 
+        }
+        if (!target.isBuriednessDefined()) {
+            logger.debug("无效目标: " + target + " 掩埋值未定义");
             return false;
+        }
     
        
         // 综合属性检查
@@ -813,8 +838,10 @@ public class SampleHumanDetector extends HumanDetector {
         }
 
         StandardEntity position = worldInfo.getPosition(target);
-        if (position == null)
+        if (position == null){
+            logger.debug("无效目标: " + target + " position == null");
             return false;
+        }
 
         // 检查建筑物入口是否被阻挡
         if (position instanceof Building && 
@@ -824,13 +851,14 @@ public class SampleHumanDetector extends HumanDetector {
         }
         
         StandardEntityURN positionURN = position.getStandardURN();
-        if (positionURN == REFUGE || positionURN == AMBULANCE_TEAM)
+        if (positionURN == REFUGE || positionURN == AMBULANCE_TEAM){
+            logger.debug("无效目标: " + target + " 在避难所或者救护车上");
             return false;
-
+        }
         return true;
     }
 
-    // 新增方法：检查建筑物入口是否被阻挡
+    // 检查建筑物入口是否被阻挡
     private boolean hasBlockedEntrance(Building building) {
         for (Edge edge : getEntranceEdges(building)) {
             EntityID roadID = edge.getNeighbour();
@@ -855,7 +883,7 @@ public class SampleHumanDetector extends HumanDetector {
         return false;
     }
 
-    // 新增方法：获取建筑物的入口边
+    // 获取建筑物的入口边
     private List<Edge> getEntranceEdges(Building building) {
         List<Edge> entrances = new ArrayList<>();
         for (Edge edge : building.getEdges()) {
@@ -866,7 +894,7 @@ public class SampleHumanDetector extends HumanDetector {
         return entrances;
     }
 
-    // 新增方法：检查障碍物是否覆盖边
+    // 检查障碍物是否覆盖边
     private boolean coversEdge(Blockade blockade, Edge edge) {
         try {
             Shape blockadeShape = blockade.getShape();

@@ -40,7 +40,7 @@ public class DefaultExtActionFireRescue extends ExtAction {
   private EntityID target;
 
   private MessageManager messageManager;
-  private EntityID lastRescuedCivilian = null; // 记录上次救援的市民ID
+  private EntityID lastRescuedHuman = null; // 记录上次救援的市民ID
 
   public DefaultExtActionFireRescue(AgentInfo agentInfo, WorldInfo worldInfo, ScenarioInfo scenarioInfo, ModuleManager moduleManager, DevelopData developData) {
     super(agentInfo, worldInfo, scenarioInfo, moduleManager, developData);
@@ -60,9 +60,8 @@ public class DefaultExtActionFireRescue extends ExtAction {
     }
   }
 
-  public EntityID getLastRescuedCivilian()
-  {
-    return lastRescuedCivilian;
+  public EntityID getLastRescuedHuman() {
+    return lastRescuedHuman;
   }
 
   public ExtAction precompute(PrecomputeData precomputeData) {
@@ -141,8 +140,8 @@ public class DefaultExtActionFireRescue extends ExtAction {
     FireBrigade agent = (FireBrigade) this.agentInfo.me();
 
     // 检查上次救援的市民是否掩埋度变为0
-    if (lastRescuedCivilian != null) {
-        StandardEntity entity = worldInfo.getEntity(lastRescuedCivilian);
+    if (lastRescuedHuman != null) {
+        StandardEntity entity = worldInfo.getEntity(lastRescuedHuman);
         if (entity instanceof Civilian) {
             Civilian human = (Civilian) entity;
             if (human.isBuriednessDefined() && human.getBuriedness() == 0) {
@@ -153,11 +152,11 @@ public class DefaultExtActionFireRescue extends ExtAction {
                     // 日志记录
                     logger.debug("消防员发送市民救援消息: " + human.getID() + " 掩埋度已降为0");
                 }
-                lastRescuedCivilian = null; // 重置
+                lastRescuedHuman = null; // 重置
             }
         }else {
-            // 如果lastRescuedCivilian不是市民，则重置为null，避免后续错误
-            lastRescuedCivilian = null;
+            // 如果lastRescuedHuman不是市民，则重置为null，避免后续错误
+            lastRescuedHuman = null;
           }
     }
 
@@ -193,14 +192,9 @@ public class DefaultExtActionFireRescue extends ExtAction {
       EntityID targetPosition = human.getPosition();
       if (agentPosition.getValue() == targetPosition.getValue()) {
         if (human.isBuriednessDefined() && human.getBuriedness() > 0) {
-          // 只有市民才记录，非市民不记录
-          if (human instanceof Civilian) {
-            this.lastRescuedCivilian = human.getID();
-            logger.debug("消防员开始救援市民，记录目标: " + this.lastRescuedCivilian);
-          } else {
-            // 对于非市民，将lastRescuedCivilian设为null，避免后续检查出错
-            this.lastRescuedCivilian = null;
-          }
+          // 记录任何人类（包括市民和警察）
+          this.lastRescuedHuman = human.getID();
+          logger.debug("消防员开始救援人类，记录目标: " + this.lastRescuedHuman);
           return new ActionRescue(human);
         }
       } else {

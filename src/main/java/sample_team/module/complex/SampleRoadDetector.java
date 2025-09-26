@@ -262,7 +262,6 @@ public class SampleRoadDetector extends RoadDetector {
 
     @Override
     public SampleRoadDetector calc() {
-
         // 首先检查自身damage是否大于0
         Human self = (Human) agentInfo.me();
         if (self.isDamageDefined() && self.getDamage() > 0) {
@@ -292,14 +291,30 @@ public class SampleRoadDetector extends RoadDetector {
             }
         }
 
-        // 开局阶段逻辑 - 优先处理分配的避难所
+        // 开局阶段逻辑 - 优先处理自身障碍物，然后处理分配的避难所
         if (agentInfo.getTime() < INITIAL_PHASE_DURATION && !initialTaskCompleted) {
-            // 如果还没有分配初始避难所，尝试分配一个
+            // 首先检查自身位置是否有障碍物
+            EntityID currentPosition = agentInfo.getPosition();
+            StandardEntity currentEntity = worldInfo.getEntity(currentPosition);
+            if (currentEntity instanceof rescuecore2.standard.entities.Area) {
+                rescuecore2.standard.entities.Area currentArea = (rescuecore2.standard.entities.Area) currentEntity;
+                if (currentArea.isBlockadesDefined() && !currentArea.getBlockades().isEmpty()) {
+                    for (EntityID blockadeId : currentArea.getBlockades()) {
+                        StandardEntity blockadeEntity = worldInfo.getEntity(blockadeId);
+                        if (blockadeEntity instanceof Blockade && isValidBlockade((Blockade) blockadeEntity)) {
+                            this.result = currentPosition;
+                            logger.debug("开局阶段优先清理自身位置障碍物: " + currentPosition);
+                            return this;
+                        }
+                    }
+                }
+            }
+            
+            // 如果没有自身障碍物，再执行初始避难所任务
             if (initialRefugeTarget == null) {
                 initialRefugeTarget = assignInitialRefuge();
             }
             
-            // 如果有分配的避难所，优先前往
             if (initialRefugeTarget != null) {
                 this.result = initialRefugeTarget;
                 return this;
