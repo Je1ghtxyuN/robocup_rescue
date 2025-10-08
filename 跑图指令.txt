@@ -1,0 +1,39 @@
+编译：
+服务器：
+./gradlew clean
+./gradlew completeBuild
+若gradlew网络超时，换腾讯源
+distributionUrl=https\://mirrors.cloud.tencent.com/gradle/gradle-7.3-bin.zip
+客户端：
+./gradlew clean
+./gradlew build
+
+权限不够：
+chmod +x gradlew
+chmod +x launch.sh
+
+跑图:
+预计算：
+服务器：
+cd scripts
+bash start-precompute.sh -m ../maps/paris/map -c ../maps/paris/config
+bash start-precompute.sh -m ../maps/kobe/map -c ../maps/kobe/config
+客户端：
+bash launch.sh -t 1,0,1,0,1,0 -h localhost -pre 1
+服务器：
+./kill.sh
+bash start-comprun.sh -m ../maps/paris/map -c ../maps/paris/config
+bash start-comprun.sh -m ../maps/kobe/map -c ../maps/kobe/config
+客户端：
+./launch.sh -all
+
+
+非预计算：
+服务器：
+cd scripts
+./start.sh -m ../maps/kobe/map -c ../maps/kobe/config
+./start.sh -m ../maps/paris/map -c ../maps/paris/config
+./start.sh -m ../maps/test/map -c ../maps/test/config
+
+客户端：
+./launch.sh -all

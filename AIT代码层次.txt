@@ -1,0 +1,78 @@
+AIT_2022/
+├── extaction/
+│   ├── AITExtActionMove.java
+│   ├── AITExtActionClear.java
+│   ├── AITExtActionFireFighting.java
+│   ├── AITExtActionTransport.java
+│   ├── AITExtActionFireRescue.java
+├── centralized/
+│   ├── AITCommandExecutorFire.java
+│   ├── AITCommandPicker.java
+│   ├── AITCommandExecutorPolice.java
+│   ├── AITCommandExecutorAmbulance.java
+├── module/
+│   ├── complex/
+│   │   ├── at/
+│   │   │   ├── AITAmbulanceTargetAllocator.java
+│   │   │   ├── AITAmbulanceTeamDetector.java
+│   │   │   ├── CivilianMessages.java
+│   │   │   ├── AITAmbulanceTeamSearch.java
+│   │   ├── pf/
+│   │   │   ├── CivilianMessages.java
+│   │   │   ├── AITPoliceTargetAllocator.java
+│   │   │   ├── yb/
+│   │   │   │   ├── AITPoliceForceDetector.java
+│   │   │   │   ├── AITPoliceForceSearch.java
+│   │   ├── dcop/
+│   │   │   ├── MaxSumPoliceTargetAllocator.java
+│   │   │   ├── MaxSumAmbulanceTargetAllocator.java
+│   │   │   ├── BMSCardinalityFactor.java
+│   │   │   ├── BMSSelectorFactor.java
+│   │   │   ├── MaxSumFireTargetAllocator.java
+│   │   │   ├── BufferedCommunicationAdapter.java
+│   │   ├── common/
+│   │   │   ├── EntityArea.java
+│   │   │   ├── EntityFilter.java
+│   │   │   ├── WorldInfoUtils.java
+│   │   │   ├── Stucked.java
+│   │   │   ├── LifeXpectancy.java
+│   │   ├── fb/
+│   │   │   ├── AITBuildingDetector.java
+│   │   │   ├── CivilianMessages.java
+│   │   │   ├── AITFireBrigadeDetector.java
+│   │   │   ├── AITFireBrigadeSearch.java
+│   │   │   ├── AITFireTargetAllocator.java
+│   │   │   ├── AITBuildingSearch.java
+│   ├── comm/
+│   │   ├── AITMessageCoordinator.java
+│   │   ├── ChannelPF.java
+│   │   ├── Channel.java
+│   │   ├── AbstractChannel.java
+│   │   ├── VoiceCommunication.java
+│   │   ├── ChannelAT.java
+│   │   ├── ChannelFB.java
+│   │   ├── AITChannelSubscriber.java
+│   ├── algorithm/
+│   │   ├── StuckHumans.java
+│   │   ├── KmeansClustering.java
+│   │   ├── MergedClustering.java
+│   │   ├── RoadwidthAstarPathPlanning.java
+│   │   ├── PFPathPlanning.java
+│   │   ├── HierarchicalFireClustering.java
+│   │   ├── Hungarian.java
+│   │   ├── DispersibleGrouping.java
+│   │   ├── Triple.java
+│   │   ├── KmeansPP.java
+│   │   ├── FailedMove.java
+│   │   ├── ConvexHull.java
+│   │   ├── NeighborBuildings.java
+│   │   ├── AstarPathPlanning.java
+│   │   ├── GraphEdgeValidator.java
+│   │   ├── ATPathPlanning.java
+│   │   ├── OvercrowdingArea.java
+│   │   ├── Couple.java
+│   │   ├── Astar.java
+│   │   ├── Highways.java
+│   │   ├── PassablePathPlanning.java
+│   ├── util/
+│   │   ├── DebugUtil.java
