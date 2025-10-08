@@ -1,4 +1,4 @@
-package sample_team.module.complex;
+package SEU.module.complex;
 
 import adf.core.agent.communication.MessageManager;
 import adf.core.agent.develop.DevelopData;
@@ -7,27 +7,27 @@ import adf.core.agent.info.ScenarioInfo;
 import adf.core.agent.info.WorldInfo;
 import adf.core.agent.module.ModuleManager;
 import adf.core.agent.precompute.PrecomputeData;
-import adf.core.component.module.complex.FireTargetAllocator;
+import adf.core.component.module.complex.AmbulanceTargetAllocator;
 import java.util.HashMap;
 import java.util.Map;
 import rescuecore2.worldmodel.EntityID;
 
-public class SampleFireTargetAllocator extends FireTargetAllocator {
+public class SampleAmbulanceTargetAllocator extends AmbulanceTargetAllocator {
 
-  public SampleFireTargetAllocator(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager, DevelopData developData) {
+  public SampleAmbulanceTargetAllocator(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager, DevelopData developData) {
     super(ai, wi, si, moduleManager, developData);
   }
 
 
   @Override
-  public FireTargetAllocator resume(PrecomputeData precomputeData) {
+  public AmbulanceTargetAllocator resume(PrecomputeData precomputeData) {
     super.resume(precomputeData);
     return this;
   }
 
 
   @Override
-  public FireTargetAllocator preparate() {
+  public AmbulanceTargetAllocator preparate() {
     super.preparate();
     return this;
   }
@@ -40,13 +40,13 @@ public class SampleFireTargetAllocator extends FireTargetAllocator {
 
 
   @Override
-  public FireTargetAllocator calc() {
+  public AmbulanceTargetAllocator calc() {
     return this;
   }
 
 
   @Override
-  public FireTargetAllocator updateInfo(MessageManager messageManager) {
+  public AmbulanceTargetAllocator updateInfo(MessageManager messageManager) {
     super.updateInfo(messageManager);
     return this;
   }

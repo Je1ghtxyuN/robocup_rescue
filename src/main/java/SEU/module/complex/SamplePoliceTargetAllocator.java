@@ -1,4 +1,4 @@
-package sample_team.module.complex;
+package SEU.module.complex;
 
 import adf.core.agent.communication.MessageManager;
 import adf.core.agent.develop.DevelopData;
@@ -7,28 +7,34 @@ import adf.core.agent.info.ScenarioInfo;
 import adf.core.agent.info.WorldInfo;
 import adf.core.agent.module.ModuleManager;
 import adf.core.agent.precompute.PrecomputeData;
-import adf.core.component.module.complex.AmbulanceTargetAllocator;
+import adf.core.component.module.complex.PoliceTargetAllocator;
 import java.util.HashMap;
 import java.util.Map;
 import rescuecore2.worldmodel.EntityID;
 
-public class SampleAmbulanceTargetAllocator extends AmbulanceTargetAllocator {
+public class SamplePoliceTargetAllocator extends PoliceTargetAllocator {
 
-  public SampleAmbulanceTargetAllocator(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager, DevelopData developData) {
+  public SamplePoliceTargetAllocator(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager, DevelopData developData) {
     super(ai, wi, si, moduleManager, developData);
   }
 
 
   @Override
-  public AmbulanceTargetAllocator resume(PrecomputeData precomputeData) {
+  public PoliceTargetAllocator resume(PrecomputeData precomputeData) {
     super.resume(precomputeData);
+    if (this.getCountResume() >= 2) {
+      return this;
+    }
     return this;
   }
 
 
   @Override
-  public AmbulanceTargetAllocator preparate() {
+  public PoliceTargetAllocator preparate() {
     super.preparate();
+    if (this.getCountPrecompute() >= 2) {
+      return this;
+    }
     return this;
   }
 
@@ -40,14 +46,17 @@ public class SampleAmbulanceTargetAllocator extends AmbulanceTargetAllocator {
 
 
   @Override
-  public AmbulanceTargetAllocator calc() {
+  public PoliceTargetAllocator calc() {
     return this;
   }
 
 
   @Override
-  public AmbulanceTargetAllocator updateInfo(MessageManager messageManager) {
+  public PoliceTargetAllocator updateInfo(MessageManager messageManager) {
     super.updateInfo(messageManager);
+    if (this.getCountUpdateInfo() >= 2) {
+      return this;
+    }
     return this;
   }
 }

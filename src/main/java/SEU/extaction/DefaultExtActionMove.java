@@ -1,4 +1,4 @@
-package sample_team.module.extaction;
+package SEU.extaction;
 
 import adf.core.agent.action.Action;
 import adf.core.agent.action.common.ActionMove;
@@ -44,7 +44,7 @@ public class DefaultExtActionMove extends ExtAction {
       case NON_PRECOMPUTE:
         this.pathPlanning = moduleManager.getModule(
             "DefaultExtActionMove.PathPlanning",
-            "adf.impl.module.algorithm.AStarPathPlanning");
+            "adf.impl.module.algorithm.DijkstraPathPlanning");
         break;
     }
   }
