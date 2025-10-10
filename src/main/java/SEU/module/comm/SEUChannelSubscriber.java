@@ -16,9 +16,10 @@ import rescuecore2.standard.entities.StandardEntity;
 import rescuecore2.standard.entities.StandardEntityURN;
 import rescuecore2.standard.entities.StandardWorldModel;
 import rescuecore2.worldmodel.EntityID;
-
+import adf.core.debug.DefaultLogger;
+import org.apache.log4j.Logger;
 import java.util.*;
-
+import SEU.world.SEUDEBUG;
 import static rescuecore2.standard.entities.StandardEntityURN.*;
 
 public class SEUChannelSubscriber extends ChannelSubscriber {
@@ -27,13 +28,16 @@ public class SEUChannelSubscriber extends ChannelSubscriber {
     private static final double PF_RATIO = 1.2;
     private static final double AT_RATIO = 2.0;
     private double sendMessageAgentsRatio = 0; //使用信息交互智能体的比例
+    private Logger logger;
 
     @Override
     public void subscribe(AgentInfo agentInfo, WorldInfo worldInfo, ScenarioInfo scenarioInfo,
                           MessageManager messageManager) { //用于重载
         if (sendMessageAgentsRatio == 0) {
             initSendMessageAgentsRatio(worldInfo, scenarioInfo); //（对每个智能体）初始化为视野面积*视野智能体数/地图总尺寸
+            logger = DefaultLogger.getLogger(agentInfo.me());
         }
+        logger.debug("进入SEUChannelSubcriber");
         if (agentInfo.getTime() == scenarioInfo.getKernelAgentsIgnoreuntil()) { //地图config，时间为3,即3T智能体开始运行
             int numChannels = scenarioInfo.getCommsChannelsCount() - 1; //channel数量，在地图config中定义
 
@@ -51,7 +55,20 @@ public class SEUChannelSubscriber extends ChannelSubscriber {
                 channels[i] = getChannelNumber(agentType, i, numChannels, agentInfo, worldInfo, scenarioInfo);
             }
             messageManager.subscribeToChannels(channels);
+            
+            // 如果调试模式开启，打印智能体的订阅信息
+        if (SEUDEBUG.DEBUG_CHANNEL_SUBSCRIBE) {
+            // 输出智能体类型、ID、时间以及订阅的频道
+            System.out.println("Time: " + agentInfo.getTime() + 
+                               ", Agent Type: " + agentType + 
+                               ", Agent ID: " + agentInfo.getID().getValue() + 
+                               ", Subscribed Channels: " + Arrays.toString(channels));
+            // 日志记录
+            logger.debug("进入调试");
+            logger.debug("Subscribed Channels:"+Arrays.toString(channels));
         }
+        }
+        
     }
 
     //判断在当前worldinfo下agentinfo是否为智能体
@@ -109,6 +126,12 @@ public class SEUChannelSubscriber extends ChannelSubscriber {
                     if (BandWidthRemainValue > requiredBandWidthRemain[0]) {
                         requiredBandWidthRemain[0] = 0;
                         radioBandWidthRemain.setValue((int) (BandWidthRemainValue - tmp));
+                        if(SEUDEBUG.DEBUG_CHANNEL_SUBSCRIBE){
+                            // 实时输出频道容量和占用情况
+                            System.out.println("Channel " + radioBandWidthRemain.getKey() + 
+                            ": Capacity = " + BandWidthRemainValue + 
+                            ", Remaining = " + (BandWidthRemainValue - tmp));
+                        }
                     } else if (i == maxChannels - 1) {
                         requiredBandWidthRemain[0] = 0;
                         radioBandWidthRemain.setValue((int) (BandWidthRemainValue - tmp));
@@ -124,6 +147,7 @@ public class SEUChannelSubscriber extends ChannelSubscriber {
                     fbChannels[i] = radioBandWidthRemain.getKey();
                 } else if (urn == StandardEntityURN.POLICE_FORCE || urn == POLICE_OFFICE) {
                     double tmp = requiredBandWidthRemain[1];
+                    printChannelStatus(radioBandWidthRemainMap); // 输出当前频道状态
                     if (BandWidthRemainValue > requiredBandWidthRemain[1]) {
                         requiredBandWidthRemain[1] = 0;
                         radioBandWidthRemain.setValue((int) (BandWidthRemainValue - tmp));
@@ -247,14 +271,25 @@ public class SEUChannelSubscriber extends ChannelSubscriber {
         return result;
     }
 
+    private void printChannelStatus(Map<Integer, Integer> radioBandWidthRemainMap) {
+        for (Map.Entry<Integer, Integer> entry : radioBandWidthRemainMap.entrySet()) {
+            System.out.println("Channel " + entry.getKey() + 
+                               ": Capacity = " + entry.getValue());
+        }
+    }
+
     public static void main(String[] args) {
+        //用于测试和验证频道分配逻辑的功能
+        //使用 Config 对象配置一个模拟场景。
         Config config = new Config();
+        //设置场景中各类智能体（消防队、警察、救护队等）的数量
         config.setIntValue("scenario.agents.fb", 30);
         config.setIntValue("scenario.agents.at", 2);
         config.setIntValue("scenario.agents.pf", 30);
         config.setIntValue("scenario.agents.fs", 2);
         config.setIntValue("scenario.agents.ac", 30);
         config.setIntValue("scenario.agents.po", 2);
+        //义通信频道的数量（comms.channels.count=7）及其各自的带宽（如 256, 64, 等）
         config.setIntValue("comms.channels." + "0" + ".bandwidth", 256);
         config.setIntValue("comms.channels." + "1" + ".bandwidth", 64);
         config.setIntValue("comms.channels." + "2" + ".bandwidth", 32);
@@ -263,17 +298,21 @@ public class SEUChannelSubscriber extends ChannelSubscriber {
         config.setIntValue("comms.channels." + "5" + ".bandwidth", 4000);
         config.setIntValue("comms.channels." + "6" + ".bandwidth", 4000);
         config.setIntValue("comms.channels.count", 7);
+        //设置每个小队智能体最多使用的频道数（comms.channels.max.platoon=2）
         config.setIntValue("comms.channels.max.platoon", 2);
+        //创建一个模拟的消防队实体（FireBrigade），并将其添加到世界模型（worldModel）中
         FireBrigade fireBrigade = new FireBrigade(new EntityID(1111111));
         StandardWorldModel worldModel = new StandardWorldModel();
         PlatoonFire platoonFire = new PlatoonFire(new DefaultTacticsFireBrigade(),"SEU" ,false, false,
                 new ModuleConfig("./config/module.cfg", new ArrayList<>()),
                 new DevelopData(false, "./data/develop.json", new ArrayList<>()));
+        //初始化 ScenarioInfo 和 WorldInfo，用于描述场景和世界的当前状态
         ScenarioInfo scenarioInfo = new ScenarioInfo(config, ScenarioInfo.Mode.NON_PRECOMPUTE);
         WorldInfo worldInfo = new WorldInfo(worldModel);
         worldInfo.addEntity(fireBrigade);
+        //创建一个智能体信息对象（AgentInfo），用于表示当前智能体的状态。
         AgentInfo agentInfo = new AgentInfo(platoonFire, worldModel);
-
+        //调用 getChannelNumber 方法，测试不同类型的智能体（消防队、警察、救护队）在给定场景下的频道分配结果。
         int numChannels = scenarioInfo.getCommsChannelsCount() - 1;
         int maxChannels = scenarioInfo.getCommsChannelsMaxPlatoon();
         SEUChannelSubscriber subscriber = new SEUChannelSubscriber();

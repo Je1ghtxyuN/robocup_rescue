@@ -108,11 +108,14 @@ public class SampleBuildingDetector extends HumanDetector {
     for(StandardEntity standardEntity : this.worldInfo.getEntitiesOfType(CIVILIAN,AMBULANCE_TEAM,POLICE_FORCE,FIRE_BRIGADE)) {
       if (isValidHuman(standardEntity)) {
         Human h = (Human) standardEntity;
-        if (agentPosition.equals(h.getPosition()) && h.getBuriedness()>0) {
-          this.result = h.getID();
-          logger.debug("----- can rescue human: " + this.result);
-          return this;
+        if (!badHumans.contains(h)) {
+          if (agentPosition.equals(h.getPosition()) && h.getBuriedness()>0) {
+            this.result = h.getID();
+            logger.debug("----- can rescue human: " + this.result);
+            return this;
+          }  
         }
+
       }
     }
     this.result = calcTarget();

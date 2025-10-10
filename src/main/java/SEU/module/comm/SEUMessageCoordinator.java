@@ -17,12 +17,14 @@ import rescuecore2.standard.entities.StandardEntityURN;
 import rescuecore2.worldmodel.EntityID;
 
 import java.util.*;
-
+import adf.core.debug.DefaultLogger;
+import org.apache.log4j.Logger;
 
 public class SEUMessageCoordinator extends MessageCoordinator {
 
     private SEUChannelSubscriber seuChannelSubscriber;
     private static int ALLOWED_TO_SEND_DISTANCE_THRESHOLD = 10000;
+    private Logger logger;
 
     public SEUMessageCoordinator() {
         this.seuChannelSubscriber = new SEUChannelSubscriber();
@@ -34,7 +36,9 @@ public class SEUMessageCoordinator extends MessageCoordinator {
 
         if (seuChannelSubscriber.getSendMessageAgentsRatio() == 0) {
             seuChannelSubscriber.initSendMessageAgentsRatio(worldInfo, scenarioInfo);
+            logger = DefaultLogger.getLogger(agentInfo.me());
         }
+        logger.debug("调用MessageCoordinator");
         ArrayList<CommunicationMessage> policeMessages = new ArrayList<>();
         ArrayList<CommunicationMessage> ambulanceMessages = new ArrayList<>();
         ArrayList<CommunicationMessage> fireBrigadeMessages = new ArrayList<>();

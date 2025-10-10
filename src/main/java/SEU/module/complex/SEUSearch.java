@@ -48,7 +48,7 @@ public class SEUSearch extends Search {
     super(ai, wi, si, moduleManager, developData);
     logger = DefaultLogger.getLogger(agentInfo.me());
 
-    StandardEntityURN agentURN = ai.me().getStandardURN();//代理类型
+    StandardEntityURN agentURN = ai.me().getStandardURN();
     if (agentURN == AMBULANCE_TEAM) {
       this.pathPlanning = moduleManager.getModule(
               "SampleSearch.PathPlanning.Ambulance",
@@ -134,7 +134,6 @@ public class SEUSearch extends Search {
 
 //    logger.debug("searchSet: " + searchSet);
     this.areaCost = new HashMap<>();
-    //计算与候选建筑的距离来优化搜索目标列表。
     for (EntityID singleBuilding : searchSet) {
       if (!hasSeachedinCluster(singleBuilding, messageManager)) {
         int distance = this.worldInfo.getDistance(singleBuilding, this.agentInfo.me().getID());
@@ -150,7 +149,6 @@ public class SEUSearch extends Search {
 
   @Override
   public Search calc() {
-    //calc 方法的主要功能是确定代理最近的目标建筑，计算到目标的路径，并将最终目的地赋值给 result。
     this.result = null;
 
     ArrayList<EntityID> target = new ArrayList<>();
@@ -190,7 +188,7 @@ public class SEUSearch extends Search {
 
 
   private void updateMessage(MessageManager messageManager)
-  {//检查变化，处理来自其他代理的消息，并根据消息的类型和优先级更新代理的知识。
+  {
     Set<EntityID> changedEntities = this.worldInfo.getChanged().getChangedEntities();
     changedEntities.add(this.agentInfo.getID());
     int time = this.agentInfo.getTime();
@@ -210,7 +208,7 @@ public class SEUSearch extends Search {
     }
 
     for (List<CommunicationMessage> lm : messageManager.getSendMessageList()) {
-      logger.debug("new channel: ");
+      //logger.debug("new channel: ");
       for (CommunicationMessage m : lm) {
         StandardMessage standardMessage = (StandardMessage) m;
         if (standardMessage.getSendingPriority() == StandardMessagePriority.LOW) {

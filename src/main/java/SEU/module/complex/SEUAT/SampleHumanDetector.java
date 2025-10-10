@@ -44,7 +44,7 @@ public class SampleHumanDetector extends HumanDetector {
 
   @Override
   public HumanDetector updateInfo(MessageManager messageManager) {
-    logger.debug("Time:" + agentInfo.getTime());
+    //logger.debug("Time:" + agentInfo.getTime());
     super.updateInfo(messageManager);
     undateWrongCivilians();
 
@@ -75,7 +75,7 @@ public class SampleHumanDetector extends HumanDetector {
         if (actionLoad1.getTarget().equals(actionLoad2.getTarget())) {
           if (this.worldInfo.getEntity(actionLoad1.getTarget()) instanceof Human) {
             Human badHuman = (Human) this.worldInfo.getEntity(actionLoad1.getTarget());
-            logger.debug("badHuman:" + badHuman);
+            //logger.debug("badHuman:" + badHuman);
             wrongCivilians.add(badHuman);
           }
         }
@@ -85,11 +85,11 @@ public class SampleHumanDetector extends HumanDetector {
   @Override
   public HumanDetector calc() {
 
-    logger.debug("----- HumanDetector start -----");
+    //logger.debug("----- HumanDetector start -----");
     // human can transport
     Human transportHuman = this.agentInfo.someoneOnBoard();
     if (transportHuman != null) {
-      logger.debug("someoneOnBoard:" + transportHuman);
+      //logger.debug("someoneOnBoard:" + transportHuman);
       this.result = transportHuman.getID();
       return this;
     }
@@ -102,7 +102,7 @@ public class SampleHumanDetector extends HumanDetector {
         if (!(wrongCivilians.contains(h))) {
           if (agentPosition.equals(h.getPosition()) && h.getBuriedness()<15 && !hasATWait(h)) {
             this.result = h.getID();
-            logger.debug("----- can load human: " + this.result);
+            //logger.debug("----- can load human: " + this.result);
             return this;
           }
         }
@@ -111,13 +111,13 @@ public class SampleHumanDetector extends HumanDetector {
 
     // calc the target
     this.result = calcTarget();
-    logger.debug("the result:" + this.result);
+    //logger.debug("the result:" + this.result);
     return this;
   }
 
 
   private EntityID calcTarget() {
-    logger.debug("----- Human calc targets start -----");
+    //logger.debug("----- Human calc targets start -----");
     List<Human> rescueTargets = filterRescueTargets(
         this.worldInfo.getEntitiesOfType(CIVILIAN));
     List<Human> rescueTargetsInCluster = filterInCluster(rescueTargets);
@@ -300,7 +300,7 @@ public class SampleHumanDetector extends HumanDetector {
     }
 
     if (numOfAmbulanceTeam>=numOfHuman){
-      logger.debug("----- 已经有救护员等待 -----");
+      //logger.debug("----- 已经有救护员等待 -----");
         return true;
     }
     return false;
@@ -316,15 +316,15 @@ public class SampleHumanDetector extends HumanDetector {
       for(CommunicationMessage communicationMessage: messageManager.getReceivedMessageList(MessageAmbulanceTeam.class)){
         MessageAmbulanceTeam mat = (MessageAmbulanceTeam) communicationMessage;
         int mat_index = clustering.getClusterIndex(mat.getPosition());
-        // logger.debug("======Message " + mat + "的目标是：" + mat.getTargetID());
+        // //logger.debug("======Message " + mat + "的目标是：" + mat.getTargetID());
         if (mat.getTargetID().equals(human.getPosition()) || mat.getTargetID().equals(human.getID())) {
           if (mat_index == human_index) {
             counter++;
-            // logger.debug("------别的救护员的目标-----");
+            // //logger.debug("------别的救护员的目标-----");
             // return true;
           }
           if (counter>2) {
-            logger.debug("------别的救护员的目标-----");
+            //logger.debug("------别的救护员的目标-----");
             return true;
           }
         }
@@ -336,7 +336,7 @@ public class SampleHumanDetector extends HumanDetector {
         if (!(this.worldInfo.getEntity(mat.getTargetID()) instanceof Human)) {
           continue;
         }
-        // logger.debug("======Message " + mat + "的目标是：" + mat.getTargetID());
+        // //logger.debug("======Message " + mat + "的目标是：" + mat.getTargetID());
         int mat_index = clustering.getClusterIndex(mat.getPosition());
         if (mat_index != human_index) {
           continue;
@@ -349,7 +349,7 @@ public class SampleHumanDetector extends HumanDetector {
 
         }
         if (counter>3) {
-          logger.debug("------别的救护员的目标-----");
+          //logger.debug("------别的救护员的目标-----");
           return true;
         }
       }

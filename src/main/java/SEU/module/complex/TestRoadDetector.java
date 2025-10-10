@@ -75,7 +75,6 @@ public class TestRoadDetector extends RoadDetector {
 		//如果不在目标区域中，先更新优先级道路
 		//如果优先级道路不为空，优先清理优先级道路
 		//如果优先级道路为空，则直接开始清除目标区域
-		logger.debug("refuge location" + refugeLocation);
 		logger.debug("priority roads" + priorityRoads);
 		logger.debug("target areas" + targetAreas);
 		logger.debug("opened areas" + openedAreas);
@@ -302,7 +301,7 @@ public class TestRoadDetector extends RoadDetector {
 		if(agentInfo.getTime()==1)
 		{
 			this.priorityRoads = new HashSet<>();
-			this.targetAreas = new HashSet<>();
+			this.targetAreas =new HashSet<>();
 			this.refugeLocation = new HashSet<>();
 			for (StandardEntity e : this.worldInfo.getEntitiesOfType(REFUGE)) {
 				for (EntityID id : ((Building) e).getNeighbours()) {
@@ -494,13 +493,13 @@ public class TestRoadDetector extends RoadDetector {
 		//openedAreas.add((Area) currentPosition);
 		for (StandardEntity e : this.worldInfo.getEntitiesOfType(ROAD)) {
 			Road road = (Road) e;
-			if (!road.isBlockadesDefined() || (road.isBlockadesDefined() && road.getBlockades().isEmpty())) {
+			if (road.isBlockadesDefined() && road.getBlockades().isEmpty()) {
 				openedAreas.add(road.getID());
 				historyClusters.add(this.clustering.getClusterIndex(road.getID()));
 			}
 		}
 		historyClusters.add(this.clustering.getClusterIndex(this.agentInfo.getPosition()));
-		//openedAreas.add(this.agentInfo.getPosition());
+		openedAreas.add(this.agentInfo.getPosition());
 		for (EntityID e : openedAreas) {
 			priorityRoads.remove(e);
 			targetAreas.remove(e);

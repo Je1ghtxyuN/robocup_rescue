@@ -131,7 +131,7 @@ public class SEUPathPlanning extends PathPlanning {
                 }
                 
             }
-            logger.debug("choose:" + finallytarget);
+            //logger.debug("choose:" + finallytarget);
             path = getShortestPath(this.from, finallytarget);
             previousPath = path;
             
@@ -140,9 +140,9 @@ public class SEUPathPlanning extends PathPlanning {
         if (path != null && !path.isEmpty()) {         
             result = path;
             
-            logger.debug("path:" + path);
+            //logger.debug("path:" + path);
         }else{        
-            logger.debug("-----path is null-----");   	
+            //logger.debug("-----path is null-----");   	
         }
         return this;
     }
@@ -190,7 +190,7 @@ public class SEUPathPlanning extends PathPlanning {
                     double neighbourG = current.getG()+this.worldInfo.getDistance(neighbour, current.getId())/1000;
                     if (!(me instanceof PoliceForce)) {
                         if (this.pathhelper.unpassable.get(current.getId()) == neighbour) {
-                            logger.debug("----- need to change path -----");
+                            //logger.debug("----- need to change path -----");
                             neighbourG *= 100000;
                         }
                         if (this.pathhelper.getAllBadEntrance().contains(neighbour)) {
