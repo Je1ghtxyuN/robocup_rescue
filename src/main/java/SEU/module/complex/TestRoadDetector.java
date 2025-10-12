@@ -750,6 +750,4 @@ public class TestRoadDetector extends RoadDetector {
 		return positionURN != REFUGE && positionURN != AMBULANCE_TEAM;
 	}
 
-
-
 }
