@@ -1,6 +1,6 @@
 #!/bin/bash
 
-LOADER="adf.impl.DefaultLoader"
+LOADER="adf.impl.DefaultLoader -Xmx12g"
 PARAMS=$*
 
 cd `dirname $0`

@@ -1,3 +1,15 @@
+buildscript {
+    repositories {
+        maven { url 'https://maven.aliyun.com/repository/google/' }
+        maven { url 'https://maven.aliyun.com/repository/jcenter/'}
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:2.2.3'
+
+        // NOTE: Do not place your application dependencies here; they belong
+        // in the individual module build.gradle files
+    }        
+}
 plugins {
   id 'java'
 }
@@ -9,14 +21,23 @@ group = 'com.github.roborescue'
 sourceCompatibility = '17'
 targetCompatibility = '17'
 version = '4.0'
+allprojects {
+    repositories {
+        maven { url 'https://maven.aliyun.com/repository/google/' }
+        maven { url 'https://maven.aliyun.com/repository/jcenter/'}
+    }
+}
 
 dependencies {
   implementation fileTree(dir: 'lib', include: '*.jar')
   implementation 'com.github.roborescue:rcrs-server:master-SNAPSHOT'
   implementation 'com.github.roborescue:adf-core-java:master-SNAPSHOT'
   implementation 'log4j:log4j:1.2.17'
-  implementation 'com.google.guava:guava:31.1-jre'
-  
+    implementation 'org.openforis.collect:collect:4.0.75'
+  implementation 'com.google:google:5'
+//    implementation 'com.google.gms.google-services:com.google.gms.google-services.gradle.plugin:4.3.15'
+  implementation 'com.google.common.inject:inject-common:1.0'
+
   testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.1'
   testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.1'
 }
@@ -65,5 +86,5 @@ task launch(type: JavaExec) {
   classpath += files('.')
   classpath += sourceSets.main.runtimeClasspath
   mainClass = 'adf.core.Main'
-  maxHeapSize = '2048m'
+  maxHeapSize = '12288m'
 }
