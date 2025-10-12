@@ -1,6 +1,6 @@
 package AIT_2022.module.util;
 
-// rescue
+// 救援相关导入
 
 import adf.core.agent.info.AgentInfo;
 import adf.core.agent.info.ScenarioInfo;
@@ -10,11 +10,11 @@ import rescuecore2.worldmodel.EntityID;
 import rescuecore2.standard.entities.StandardEntity;
 import rescuecore2.standard.entities.Area;
 import adf.core.agent.action.Action;
-// AIT module
+// AIT模块
 import AIT_2022.module.algorithm.ConvexHull;
-// visual-debugger
-//import com.mrl.debugger.remote.VDClient;
-// java
+// 可视化调试器
+import com.mrl.debugger.remote.VDClient;
+// Java相关
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -23,8 +23,8 @@ import java.awt.Polygon;
 import java.awt.geom.Line2D;
 
 /**
- * DebugUtil module make output for debug. If you want to add new debug message or visual-debugging,
- * you have to implement the method on this class.
+ * DebugUtil模块用于生成调试输出。如果你想添加新的调试消息或可视化调试功能，
+ * 必须在此类中实现相应的方法。
  */
 public class DebugUtil {
 
@@ -35,7 +35,7 @@ public class DebugUtil {
   private StandardEntity myEntity;
   private StandardEntityURN myUrn;
 
-  //private VDClient vdclient = VDClient.getInstance();
+  private VDClient vdclient = VDClient.getInstance();
 
   public DebugUtil(AgentInfo ai, WorldInfo wi, ScenarioInfo si) {
     this.worldInfo = wi;
@@ -47,20 +47,20 @@ public class DebugUtil {
   }
 
   /**
-   * This method display which agent is using the module that called this method. Used to check if
-   * the module specified in config.cfg is used.
+   * 此方法显示哪个智能体正在调用调用此方法的模块。
+   * 用于检查config.cfg中指定的模块是否被使用。
    */
   public void whoCalledWhat() {
     System.out.println(Thread.currentThread().getStackTrace()[2].getClassName()
-        + "is called by [" + this.myUrn + "(" + this.myId + ")]");
+        + "被 [" + this.myUrn + "(" + this.myId + ")] 调用");
   }
 
   /**
-   * This method stdout ids collection with prefix
+   * 此方法使用前缀标准输出ID集合
    *
-   * @param collection You want to display
-   * @param time       when info
-   * @param prefix     for identify
+   * @param collection 你想要显示的集合
+   * @param time       时间信息
+   * @param prefix     用于标识的前缀
    */
   public void showIdCollection(Collection<EntityID> collection, int time, String prefix) {
     System.out.println("[" + prefix + "]" + "(" + this.myId + ")"
@@ -68,12 +68,12 @@ public class DebugUtil {
   }
 
   /**
-   * This method stdout one type ids collection with prefix
+   * 此方法使用前缀标准输出特定类型的ID集合
    *
-   * @param collection You want to display
-   * @param time       when info
-   * @param prefix     for identify
-   * @param urn        You want to see type
+   * @param collection 你想要显示的集合
+   * @param time       时间信息
+   * @param prefix     用于标识的前缀
+   * @param urn        你想要查看的类型
    */
   public void showIdCollectionPeekType(
       Collection<EntityID> collection, int time,
@@ -87,10 +87,10 @@ public class DebugUtil {
   }
 
   /**
-   * This method stdout message
+   * 此方法标准输出消息
    *
-   * @param prefix  Prefix to specify the meaning of information
-   * @param message The message you want to display
+   * @param prefix  用于指定信息含义的前缀
+   * @param message 你想要显示的消息
    */
   public void infoMessage(String prefix, String message) {
     System.out.println("[" + prefix + "]" + message + " @ "
@@ -99,23 +99,23 @@ public class DebugUtil {
   }
 
   /**
-   * This method stdout module result(EntityID)
+   * 此方法标准输出模块结果(EntityID)
    *
-   * @param result     Result of EntityID
-   * @param moduleName Module with result
-   * @param time       Time to get results
+   * @param result     实体ID结果
+   * @param moduleName 产生结果的模块
+   * @param time       获取结果的时间
    */
   public void showResult(EntityID result, String moduleName, int time) {
     this.showResult(result, moduleName, time, "");
   }
 
   /**
-   * This method stdout module result(EntityID)
+   * 此方法标准输出模块结果(EntityID)
    *
-   * @param result     Result of EntityID
-   * @param moduleName Module with result
-   * @param time       Time to get results
-   * @param message    Information you want to add
+   * @param result     实体ID结果
+   * @param moduleName 产生结果的模块
+   * @param time       获取结果的时间
+   * @param message    你想要添加的信息
    */
   public void showResult(EntityID result, String moduleName, int time, String message) {
     String sResult = "      NULL";
@@ -129,10 +129,10 @@ public class DebugUtil {
   }
 
   /**
-   * This method stdout action
+   * 此方法标准输出动作
    *
-   * @param action Executed action
-   * @param time   Time when action was executed
+   * @param action 执行的动作
+   * @param time   动作执行的时间
    */
   public void showAction(Action action, int time) {
     String sMyId = String.format("%10d", this.myId.getValue());
@@ -141,16 +141,16 @@ public class DebugUtil {
   }
 
   /**
-   * This method stdout action
+   * 此方法标准输出动作
    *
-   * @param action  Executed action
-   * @param time    Time when action was executed
-   * @param message Information you want to add
+   * @param action  执行的动作
+   * @param time    动作执行的时间
+   * @param message 你想要添加的信息
    */
   public void showAction(Action action, int time, String message) {
     if (action == null) {
       System.out.println(
-          "[ERROR] showAction : action is null(" + time + " " + this.myId + " " + message + ")");
+          "[ERROR] showAction : 动作为空(" + time + " " + this.myId + " " + message + ")");
       return;
     }
     String sMyId = String.format("%10d", this.myId.getValue());
@@ -159,10 +159,10 @@ public class DebugUtil {
   }
 
   /**
-   * This method stdout csv format by passing the information you want to display as a list.
+   * 此方法通过传递你想要显示的信息列表，以CSV格式标准输出
    *
-   * @param prefix      Prefix to specify the meaning of information
-   * @param messageList List of information you want to display
+   * @param prefix      用于指定信息含义的前缀
+   * @param messageList 你想要显示的信息列表
    */
   public void csvFormatStdout(String prefix, List<String> messageList) {
     StringBuilder message = new StringBuilder("[");
@@ -176,41 +176,41 @@ public class DebugUtil {
     System.out.println(message.toString());
   }
 
-// Visual-Debugger
+// 可视化调试器
 
   /**
-   * This method display the cluster of agent "myId" on visual-debugger NOTE:If you use this method,
-   * you have to delete comment out vdclient
+   * 此方法在可视化调试器上显示智能体"myId"的聚类结果
+   * 注意：如果你使用此方法，必须取消vdclient的注释
    *
-   * @param cluster StandardEntity collection in cluster.
+   * @param cluster 聚类中的StandardEntity集合
    */
   public void clusteringResult(Collection<StandardEntity> cluster) {
-    // visual-debugger client connect to visual-debugger server
-    //this.vdclient.init();
+    // 可视化调试器客户端连接到可视化调试器服务器
+    this.vdclient.init();
 
-    // make convex Hull
+    // 创建凸包
     ConvexHull convexhull = new ConvexHull();
     for (StandardEntity entity : cluster) {
       convexhull.add((Area) entity);
     }
 
-    //format data & draw
+    // 格式化数据并绘制
     ArrayList<Polygon> data = new ArrayList<>(1);
     data.add(convexhull.get());
-    //this.vdclient.draw(this.myId.getValue(), "SamplePolygon", data);
+    this.vdclient.draw(this.myId.getValue(), "SamplePolygon", data);
   }
 
   /**
-   * This method display the path on visual-debugger NOTE:If you use this method, you have to delete
-   * comment out vdclient
+   * 此方法在可视化调试器上显示路径
+   * 注意：如果你使用此方法，必须取消vdclient的注释
    *
-   * @param path List of EntityID in path
+   * @param path 路径中的EntityID列表
    */
   public void pathPlanningResult(List<EntityID> path) {
-    // visual-debugger client connect to visual-debugger server
-    //this.vdclient.init();
+    // 可视化调试器客户端连接到可视化调试器服务器
+    this.vdclient.init();
 
-    // make collection of Line2D
+    // 创建Line2D集合
     ArrayList<Line2D> lines = new ArrayList<>();
     for (int ind = 1; ind < path.size(); ++ind) {
       Area area1 = (Area) this.worldInfo.getEntity(path.get(ind));
@@ -220,7 +220,7 @@ public class DebugUtil {
       lines.add(line);
     }
 
-    //draw
-    //this.vdclient.draw(this.myId.getValue(), "SampleLine", lines);
+    // 绘制
+    this.vdclient.draw(this.myId.getValue(), "SampleLine", lines);
   }
 }

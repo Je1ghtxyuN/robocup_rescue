@@ -33,7 +33,7 @@ public class Highways extends StaticClustering {
   private static final String PD_HIGHWAYS = MODULE_NAME + ".highways";
 
   // @ DEBUG {{{
-  // private VDClient vdclient = VDClient.getInstance();
+  private VDClient vdclient = VDClient.getInstance();
   // }}}
 
   public Highways(
@@ -45,7 +45,7 @@ public class Highways extends StaticClustering {
     this.registerModule(this.pathplanner);
 
     // @ DEBUG {{{
-    // this.vdclient.init();
+    this.vdclient.init();
     // }}}
   }
 
@@ -198,18 +198,18 @@ public class Highways extends StaticClustering {
   }
 
   // @ DEBUG {{{
-  // private void runVisualDebug()
-  // {
-  //     final int me = this.agentInfo.getID().getValue();
-  //     ArrayList<java.awt.Point> data = new ArrayList<>(
-  //         this.highways
-  //             .stream()
-  //             .map(this.worldInfo::getEntity)
-  //             .map(Area.class::cast)
-  //             .map(a -> new java.awt.Point(a.getX(), a.getY()))
-  //             .collect(toList()));
+  private void runVisualDebug()
+  {
+      final int me = this.agentInfo.getID().getValue();
+      ArrayList<java.awt.Point> data = new ArrayList<>(
+          this.highways
+              .stream()
+              .map(this.worldInfo::getEntity)
+              .map(Area.class::cast)
+              .map(a -> new java.awt.Point(a.getX(), a.getY()))
+              .collect(toList()));
 
-  //     this.vdclient.draw(me, "SamplePoint", data);
-  // }
+      this.vdclient.draw(me, "SamplePoint", data);
+  }
   // }}}
 }

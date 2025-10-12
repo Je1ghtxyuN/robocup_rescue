@@ -19,8 +19,8 @@ import rescuecore2.worldmodel.EntityID;
 import java.awt.Polygon;
 import java.awt.Rectangle;
 // visual debug {{{
-//import java.io.Serializable;
-//import com.mrl.debugger.remote.VDClient;
+import java.io.Serializable;
+import com.mrl.debugger.remote.VDClient;
 // }}}
 
 public class HierarchicalFireClustering extends DynamicClustering {
@@ -29,7 +29,7 @@ public class HierarchicalFireClustering extends DynamicClustering {
   List<Cluster> clusters = new LinkedList<>();
 
   // visual debug {{{
-  //private final VDClient vdclient = VDClient.getInstance();
+  private final VDClient vdclient = VDClient.getInstance();
   // }}}
 
   public HierarchicalFireClustering(
@@ -40,7 +40,7 @@ public class HierarchicalFireClustering extends DynamicClustering {
         "AIT.Algorithm.HierarchicalFireClustering.NeighborBuildings");
     this.registerModule(this.neighborBuildings);
     // visual debug {{{
-    //this.vdclient.init("localhost", 1099);
+    this.vdclient.init("localhost", 1099);
     // }}}
   }
 
@@ -85,20 +85,20 @@ public class HierarchicalFireClustering extends DynamicClustering {
     this.clusters = this.clustering(fireIds);
 
     // visual debug {{{
-    //List<Polygon> datas = new ArrayList<>();
-    //for (Cluster cluster : this.clusters)
-    //{
-    //    ConvexHull convexHull = new ConvexHull();
-    //    cluster.members.stream().map(this.worldInfo::getEntity)
-    //            .filter(Area.class::isInstance).map(Area.class::cast)
-    //            .forEach(a -> convexHull.add(a));
-    //    convexHull.compute();
-    //    datas.add(convexHull.get());
-    //}
-    //this.vdclient.drawAsync(
-    //        this.agentInfo.getID().getValue(),
-    //        "ClusterConvexhull",
-    //        (Serializable) datas);
+    List<Polygon> datas = new ArrayList<>();
+    for (Cluster cluster : this.clusters)
+    {
+       ConvexHull convexHull = new ConvexHull();
+       cluster.members.stream().map(this.worldInfo::getEntity)
+               .filter(Area.class::isInstance).map(Area.class::cast)
+               .forEach(a -> convexHull.add(a));
+       convexHull.compute();
+       datas.add(convexHull.get());
+    }
+    this.vdclient.drawAsync(
+           this.agentInfo.getID().getValue(),
+           "ClusterConvexhull",
+           (Serializable) datas);
     // }}}
 
     return this;

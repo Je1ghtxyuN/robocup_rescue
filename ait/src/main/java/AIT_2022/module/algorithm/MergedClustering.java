@@ -15,8 +15,8 @@ import rescuecore2.standard.entities.*;
 import rescuecore2.worldmodel.EntityID;
 
 // visual debug {{{
-//import java.io.Serializable;
-//import com.mrl.debugger.remote.VDClient;
+import java.io.Serializable;
+import com.mrl.debugger.remote.VDClient;
 // }}}
 
 public class MergedClustering extends DynamicClustering {
@@ -30,7 +30,7 @@ public class MergedClustering extends DynamicClustering {
   private Map<Integer, List<Integer>> adjacency = new HashMap<>();
   private Map<Integer, Cluster> caches = new HashMap<>();
   // visual debug {{{
-  //private final VDClient vdclient = VDClient.getInstance();
+  private final VDClient vdclient = VDClient.getInstance();
   // }}}
 
   public MergedClustering(AgentInfo ai, WorldInfo wi, ScenarioInfo si,
@@ -40,7 +40,7 @@ public class MergedClustering extends DynamicClustering {
     this.registerModule(this.clusterer);
     this.myUrn = ai.me().getStandardURN();
     // visual debug {{{
-    //this.vdclient.init("localhost", 1099);
+    this.vdclient.init("localhost", 1099);
     // }}}
   }
 
@@ -212,13 +212,13 @@ public class MergedClustering extends DynamicClustering {
     final int level = this.getMergeLevel(i, this.number);
     Cluster ret = this.mergeOneToLevel(index, level);
     // visual debug {{{
-    //Collection<Integer> data  = ret.members().stream()
-    //        .mapToInt(EntityID::getValue)
-    //        .boxed().collect(Collectors.toList());
-    //this.vdclient.drawAsync(
-    //        this.agentInfo.getID().getValue(),
-    //        "ClusterArea",
-    //        (Serializable) data);
+    Collection<Integer> data  = ret.members().stream()
+           .mapToInt(EntityID::getValue)
+           .boxed().collect(Collectors.toList());
+    this.vdclient.drawAsync(
+           this.agentInfo.getID().getValue(),
+           "ClusterArea",
+           (Serializable) data);
     // }}}
     this.caches.put(i, ret);
     return ret.members();

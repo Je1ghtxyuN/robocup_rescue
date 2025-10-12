@@ -30,7 +30,7 @@ public class KmeansClustering extends StaticClustering {
   private StandardEntityURN urn;
 
   // @ DEBUG {{{
-  // private VDClient vdclient = VDClient.getInstance();
+  private VDClient vdclient = VDClient.getInstance();
   // }}}
 
   public KmeansClustering(
@@ -40,7 +40,7 @@ public class KmeansClustering extends StaticClustering {
     this.urn = this.agentInfo.me().getStandardURN();
 
     // @ DEBUG {{{
-    // this.vdclient.init();
+    this.vdclient.init();
     // }}}
   }
 
@@ -239,23 +239,23 @@ public class KmeansClustering extends StaticClustering {
   }
 
   // @ DEBUG {{{
-  // private void runVisualDebug()
-  // {
-  //     if (this.urn != POLICE_FORCE) return;
+  private void runVisualDebug()
+  {
+      if (this.urn != POLICE_FORCE) return;
 
-  //     EntityID me = this.agentInfo.getID();
-  //     Collection<StandardEntity> cluster =
-  //         this.getClusterEntities(this.getClusterIndex(me));
+      EntityID me = this.agentInfo.getID();
+      Collection<StandardEntity> cluster =
+          this.getClusterEntities(this.getClusterIndex(me));
 
-  //     ConvexHull convexhull = new ConvexHull();
-  //     for (StandardEntity entity : cluster)
-  //     {
-  //         convexhull.add((Area)entity);
-  //     }
+      ConvexHull convexhull = new ConvexHull();
+      for (StandardEntity entity : cluster)
+      {
+          convexhull.add((Area)entity);
+      }
 
-  //     ArrayList<Polygon> data = new ArrayList<>(1);
-  //     data.add(convexhull.get());
-  //     this.vdclient.draw(me.getValue(), "SamplePolygon", data);
-  // }
+      ArrayList<Polygon> data = new ArrayList<>(1);
+      data.add(convexhull.get());
+      this.vdclient.draw(me.getValue(), "SamplePolygon", data);
+  }
   // }}}
 }
