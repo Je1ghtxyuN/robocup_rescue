@@ -1,53 +1,318 @@
 package SEU.module.complex;
 
 import adf.core.agent.communication.MessageManager;
+import adf.core.agent.communication.standard.bundle.*;
+import adf.core.agent.communication.standard.bundle.information.*;
+import adf.core.agent.communication.standard.bundle.centralized.*;
 import adf.core.agent.develop.DevelopData;
-import adf.core.agent.info.AgentInfo;
-import adf.core.agent.info.ScenarioInfo;
-import adf.core.agent.info.WorldInfo;
+import adf.core.agent.info.*;
 import adf.core.agent.module.ModuleManager;
 import adf.core.agent.precompute.PrecomputeData;
+import adf.core.component.communication.CommunicationMessage;
 import adf.core.component.module.complex.FireTargetAllocator;
-import java.util.HashMap;
-import java.util.Map;
+import adf.core.component.module.algorithm.Clustering;
+import rescuecore2.standard.entities.*;
 import rescuecore2.worldmodel.EntityID;
+
+import static rescuecore2.standard.entities.StandardEntityURN.*;
+
+import es.csic.iiia.bms.*;
+import es.csic.iiia.bms.factors.*;
+import es.csic.iiia.bms.factors.CardinalityFactor.CardinalityFunction;
+import java.util.*;
+import java.util.stream.*;
+
+import SEU.module.complex.dcop.DebugLogger;
+
+import static java.util.stream.Collectors.*;
 
 public class SampleFireTargetAllocator extends FireTargetAllocator {
 
-  public SampleFireTargetAllocator(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager, DevelopData developData) {
-    super(ai, wi, si, moduleManager, developData);
-  }
+    private final static StandardEntityURN URL = FIRE_STATION;
+    private final static StandardEntityURN AGENT_URL = FIRE_BRIGADE;
+    private final static int ITERATIONS = 100;
+    private final static double PENALTY = 600.0;
+    private final static EntityID SEARCHING_TASK = new EntityID(-1);
 
+    private final Map<EntityID, EntityID> result = new HashMap<>();
+    private Set<EntityID> agents = new HashSet<>();
+    private final Set<EntityID> tasks = new HashSet<>();
+    private final Set<EntityID> ignored = new HashSet<>();
 
-  @Override
-  public FireTargetAllocator resume(PrecomputeData precomputeData) {
-    super.resume(precomputeData);
-    return this;
-  }
+    private final Map<EntityID, Factor<EntityID>> nodes = new HashMap<>();
+    private final SEU.module.complex.dcop.BufferedCommunicationAdapter adapter;
 
+    private final Clustering neighbors;
+    private final Set<EntityID> received = new HashSet<>();
 
-  @Override
-  public FireTargetAllocator preparate() {
-    super.preparate();
-    return this;
-  }
+    public SampleFireTargetAllocator(AgentInfo ai, WorldInfo wi, ScenarioInfo si,
+                                   ModuleManager mm, DevelopData dd) {
+        super(ai, wi, si, mm, dd);
+        this.adapter = new SEU.module.complex.dcop.BufferedCommunicationAdapter();
 
+        // 初始化邻居聚类模块
+        this.neighbors = mm.getModule(
+            "SampleFireTargetAllocator.Clustering",
+            "SEU.module.algorithm.NeighborBuildings");
+        this.registerModule(this.neighbors);
+    }
 
-  @Override
-  public Map<EntityID, EntityID> getResult() {
-    return new HashMap<>();
-  }
+    @Override
+    public Map<EntityID, EntityID> getResult() {
+        return this.result;
+    }
 
+    @Override
+    public FireTargetAllocator calc() {
+        this.result.clear();
+        if (this.agents.isEmpty()) {
+            this.initializeAgents();
+        }
+        if (!this.have2allocate()) {
+            return this;
+        }
 
-  @Override
-  public FireTargetAllocator calc() {
-    return this;
-  }
+        this.initializeTasks();
+        this.initializeFactorGraph();
+        for (int i = 0; i < ITERATIONS; ++i) {
+            this.nodes.values().stream().forEach(Factor::run);
+            this.adapter.execute(this.nodes);
+        }
 
+        for (EntityID agent : this.agents) {
+            final Factor<EntityID> node = this.nodes.get(agent);
+            EntityID task = selectTask((ProxyFactor<EntityID>) node);
+            if (task.equals(SEARCHING_TASK)) {
+                task = null;
+            }
+            this.result.put(agent, task);
+        }
 
-  @Override
-  public FireTargetAllocator updateInfo(MessageManager messageManager) {
-    super.updateInfo(messageManager);
-    return this;
-  }
+        // 调试输出
+        int n = 0;
+        for (EntityID id : this.agents) {
+            if (this.result.get(id) != null) {
+                ++n;
+            }
+        }
+        DebugLogger.log("消防分配器", "本次分配完成，实际分配任务智能体数 = " + n + " / " + agents.size());
+        System.out.println("FIRE ALLOCATOR -> " + n);
+
+        return this;
+    }
+
+    @Override
+    public FireTargetAllocator updateInfo(MessageManager mm) {
+        super.updateInfo(mm);
+        if (this.getCountUpdateInfo() >= 2) {
+            return this;
+        }
+
+        this.received.clear();
+
+        // 处理建筑消息
+        final Collection<CommunicationMessage> bldmessages = 
+            mm.getReceivedMessageList(MessageBuilding.class);
+        for (CommunicationMessage tmp : bldmessages) {
+            MessageBuilding message = (MessageBuilding) tmp;
+            MessageUtil.reflectMessage(this.worldInfo, message);
+        }
+
+        // 处理消防队消息
+        final Collection<CommunicationMessage> fbmessages = 
+            mm.getReceivedMessageList(MessageFireBrigade.class);
+        for (CommunicationMessage tmp : fbmessages) {
+            MessageFireBrigade message = (MessageFireBrigade) tmp;
+            MessageUtil.reflectMessage(this.worldInfo, message);
+
+            final EntityID id = message.getAgentID();
+            this.received.add(id);
+            Human fb = (Human) this.worldInfo.getEntity(id);
+            fb.undefineX();
+            fb.undefineY();
+        }
+
+        // 处理报告消息
+        final Collection<CommunicationMessage> repmessages = 
+            mm.getReceivedMessageList(MessageReport.class);
+        for (CommunicationMessage tmp : repmessages) {
+            MessageReport message = (MessageReport) tmp;
+            if (message.isFromIDDefined()) {
+                this.ignored.add(message.getFromID());
+            }
+        }
+
+        return this;
+    }
+
+    @Override
+    public FireTargetAllocator resume(PrecomputeData pd) {
+        super.resume(pd);
+        return this;
+    }
+
+    @Override
+    public FireTargetAllocator preparate() {
+        super.preparate();
+        return this;
+    }
+
+    private boolean have2allocate() {
+        if (!this.allCentersExists()) {
+            return false;
+        }
+        final int nAgents = this.agents.size();
+        if (this.received.size() != nAgents) {
+            return false;
+        }
+
+        final int lowest = this.worldInfo.getEntityIDsOfType(URL)
+            .stream()
+            .mapToInt(EntityID::getValue)
+            .min().orElse(-1);
+
+        final int me = this.agentInfo.getID().getValue();
+        final int time = this.agentInfo.getTime();
+        final int ignored = this.scenarioInfo.getKernelAgentsIgnoreuntil();
+        System.out.println("【" + URL + "】me=" + me + ", lowest=" + lowest + ", willRun=" + (me == lowest));
+        return time >= ignored && me == lowest;
+        // return true;
+    }
+
+    private boolean allCentersExists() {
+        final int fss = this.scenarioInfo.getScenarioAgentsFs();
+        final int pos = this.scenarioInfo.getScenarioAgentsPo();
+        final int acs = this.scenarioInfo.getScenarioAgentsAc();
+        return fss > 0 && pos > 0 && acs > 0;
+    }
+
+    private void initializeAgents() {
+        final Collection<EntityID> tmp = 
+            this.worldInfo.getEntityIDsOfType(AGENT_URL);
+        this.agents = new HashSet<>(tmp);
+    }
+
+    private void initializeTasks() {
+        this.tasks.clear();
+
+        // 获取所有着火建筑中位于火灾集群角落的建筑
+        this.worldInfo.getEntitiesOfType(BUILDING)
+            .stream()
+            .map(Building.class::cast)
+            .filter(Building::isOnFire)
+            .filter(this::isCornerInFireCluster)
+            .map(StandardEntity::getID)
+            .forEach(this.tasks::add);
+
+        this.tasks.removeAll(this.ignored);
+        this.tasks.add(SEARCHING_TASK);
+        DebugLogger.log("消防分配器", "任务初始化完成，着火建筑任务数 = " + (tasks.size()-1) + "，含搜索任务");
+    }
+
+    private boolean isCornerInFireCluster(Building building) {
+        final Collection<StandardEntity> affecteds = 
+            this.neighbors.getClusterEntities(
+                this.neighbors.getClusterIndex(building));
+
+        for (StandardEntity tmp : affecteds) {
+            final Building affected = (Building) tmp;
+
+            if (!affected.isFierynessDefined()) {
+                return true;
+            }
+            final int fieryness = affected.getFieryness();
+            if (fieryness == 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void initializeFactorGraph() {
+        this.initializeVariableNodes(this.agents);
+        this.initializeFactorNodes(this.tasks);
+        this.connectNodes(this.agents, this.tasks);
+    }
+
+    private void initializeVariableNodes(Collection<EntityID> ids) {
+        for (EntityID id : ids) {
+            final Factor<EntityID> tmp = new SEU.module.complex.dcop.BMSSelectorFactor<>();
+            final WeightingFactor<EntityID> vnode = new WeightingFactor<>(tmp);
+            vnode.setMaxOperator(new Minimize());
+            vnode.setIdentity(id);
+            vnode.setCommunicationAdapter(this.adapter);
+            this.nodes.put(id, vnode);
+        }
+    }
+
+    private void initializeFactorNodes(Collection<EntityID> ids) {
+        for (EntityID id : ids) {
+            final CardinalityFactor<EntityID> fnode = new SEU.module.complex.dcop.BMSCardinalityFactor<>();
+            final CardinalityFunction func = new CardinalityFunction() {
+                @Override
+                public double getCost(int nActiveVariables) {
+                    return SampleFireTargetAllocator.this.computePenalty(id, nActiveVariables);
+                }
+            };
+            fnode.setFunction(func);
+
+            fnode.setMaxOperator(new Minimize());
+            fnode.setIdentity(id);
+            fnode.setCommunicationAdapter(this.adapter);
+            this.nodes.put(id, fnode);
+        }
+    }
+
+    private void connectNodes(Collection<EntityID> vnodeids, Collection<EntityID> fnodeids) {
+        for (EntityID vnodeid : vnodeids) {
+            for (EntityID fnodeid : fnodeids) {
+                WeightingFactor<EntityID> vnode = 
+                    (WeightingFactor<EntityID>) this.nodes.get(vnodeid);
+                vnode.addNeighbor(fnodeid);
+
+                Factor<EntityID> fnode = this.nodes.get(fnodeid);
+                fnode.addNeighbor(vnodeid);
+
+                final double penalty = this.computePenalty(vnodeid, fnodeid);
+                vnode.setPotential(fnodeid, penalty);
+            }
+        }
+        DebugLogger.log("消防分配器", "变量节点与因子节点连接完成，全连接模式");
+    }
+
+    private static EntityID selectTask(ProxyFactor<EntityID> proxy) {
+        final SelectorFactor<EntityID> selector = 
+            (SelectorFactor<EntityID>) proxy.getInnerFactor();
+        return selector.select();
+    }
+
+    private double computePenalty(EntityID agent, EntityID task) {
+        if (task.equals(SEARCHING_TASK)) {
+            return 0.0;
+        }
+
+        final double d = this.worldInfo.getDistance(agent, task);
+        return d / (42000.0 / 1.5);
+    }
+
+    private double computePenalty(EntityID task, int nAgents) {
+        if (task.equals(SEARCHING_TASK)) {
+            return 0.0;
+        }
+
+        final Building entity = (Building) this.worldInfo.getEntity(task);
+        if (nAgents == 0) {
+            return PENALTY;
+        }
+
+        final int fieryness = entity.getFieryness();
+        final int volume = entity.getGroundArea() * entity.getFloors() * 3;
+        final double nRequested = fieryness * fieryness * volume / 500.0;
+
+        final double nLeasts = Math.ceil(nRequested);
+        final double ratio = Math.min((double) nAgents, nLeasts) / nLeasts;
+
+        return PENALTY * (1.0 - Math.pow(ratio, 2.0));
+    }
 }
