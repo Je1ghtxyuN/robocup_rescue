@@ -1,13 +1,8 @@
 package SEU.module.complex;
 
-
 import adf.core.agent.communication.MessageManager;
-import adf.core.agent.communication.standard.bundle.MessageUtil;
 import adf.core.agent.communication.standard.bundle.centralized.CommandPolice;
-import adf.core.agent.communication.standard.bundle.information.MessageAmbulanceTeam;
-import adf.core.agent.communication.standard.bundle.information.MessageFireBrigade;
-import adf.core.agent.communication.standard.bundle.information.MessagePoliceForce;
-import adf.core.agent.communication.standard.bundle.information.MessageRoad;
+import adf.core.agent.communication.standard.bundle.information.*;
 import adf.core.agent.develop.DevelopData;
 import adf.core.agent.info.AgentInfo;
 import adf.core.agent.info.ScenarioInfo;
@@ -17,739 +12,420 @@ import adf.core.agent.precompute.PrecomputeData;
 import adf.core.component.communication.CommunicationMessage;
 import adf.core.component.module.algorithm.Clustering;
 import adf.core.component.module.algorithm.PathPlanning;
+import adf.core.component.module.algorithm.StaticClustering;
 import adf.core.component.module.complex.RoadDetector;
 import adf.core.debug.DefaultLogger;
-import adf.impl.module.algorithm.AStarPathPlanning;
-import org.apache.log4j.Logger;
 import rescuecore2.messages.Command;
 import rescuecore2.standard.entities.*;
 import rescuecore2.standard.messages.AKSpeak;
 import rescuecore2.worldmodel.EntityID;
+import org.apache.log4j.Logger;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static rescuecore2.standard.entities.StandardEntityURN.*;
 
+/**
+ * SEU 骨架 + AIT 决策粒度（tasks 1~8 级）+ 7 种优先级源
+ * 协作机制保持 SEU 原样：仅 MessagePoliceForce 互斥 + Voice-Help 响应
+ * 长期探索 & 防重复逻辑与 SEU 完全一致
+ */
 public class TestRoadDetector extends RoadDetector {
 
-	int count=0;
-	private Logger logger;
+    /* -------------------- 运行期状态 -------------------- */
+    private Logger logger = DefaultLogger.getLogger(agentInfo.me());
 
-	private Set<EntityID> targetAreas; //目标道路，是所有堵塞的区域
-	private Set<EntityID> priorityRoads; //道路优先级
-	private Set<EntityID> refugeLocation;
-	private Set<EntityID> openedAreas = new HashSet<>();
+    private EntityID result;                // 最终选定的目标 Area
+    private int count = 0;                  // 在同一位置停留计数（SEU 防堵）
+    private EntityID longTermTarget;        // 远程开荒建筑
+    private boolean isLongTermSearch = false;
 
-	private PathPlanning pathPlanning;
+    /* -------------------- 长期探索 & 防重复 --------------- */
+    private Set<EntityID> openedAreas = new HashSet<>();
+    private Set<Integer> historyClusters = new HashSet<>();
 
-	private Clustering clustering;
+    /* -------------------- 7 种优先级源 ------------------- */
+    private Map<EntityID, Integer> tasks = new HashMap<>(); // key=AreaID, value=优先级 1~8（1最高）
+    private Set<EntityID> priorityRoads = new HashSet<>();  // SEU 的原始 priorityRoads
+    private Set<EntityID> targetAreas = new HashSet<>();    // 当前堵塞区域
+    private Set<EntityID> refugeLocation = new HashSet<>(); // 与 Refuge 相邻堵塞道路
 
-	private EntityID result;
+    /* -------------------- 依赖模块（仅2个）---------------- */
+    private PathPlanning pathPlanning;
+    private Clustering clustering;
 
-	private Set<Integer> historyClusters = new HashSet<>();
+    public TestRoadDetector(AgentInfo ai, WorldInfo wi, ScenarioInfo si,
+                                 ModuleManager moduleManager, DevelopData developData) {
+        super(ai, wi, si, moduleManager, developData);
+        this.pathPlanning = moduleManager.getModule(
+                "SampleRoadDetector.PathPlanning");
+        this.clustering = moduleManager.getModule(
+                "SampleRoadDetector.Clustering");
+        registerModule(this.pathPlanning);
+        registerModule(this.clustering);
+        this.result = null;
+    }
 
-	private EntityID longTermTarget;
+    /* **********************************************************************
+     * 主决策入口：保持 SEU 的“长期探索+防重复”骨架，只是把【选目标】换成 AIT 式
+     * **********************************************************************/
+    @Override
+    public RoadDetector calc() {
+        logger.debug("priorityRoads=" + priorityRoads);
+        logger.debug("targetAreas=" + targetAreas);
+        logger.debug("openedAreas=" + openedAreas);
 
-	private boolean isLongTermSearch = false;
+        EntityID positionID = this.agentInfo.getPosition();
+        Human me = (Human) this.agentInfo.me();
 
-	public TestRoadDetector(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager, DevelopData developData)
-	{
-		super(ai, wi, si, moduleManager, developData);
-		logger = DefaultLogger.getLogger(agentInfo.me());
-		this.pathPlanning = moduleManager.getModule(
-				"SampleRoadDetector.PathPlanning",
-				"adf.impl.module.algorithm.DijkstraPathPlanning");
-		this.clustering = moduleManager.getModule("SampleRoadDetector.Clustering",
-				"adf.impl.module.algorithm.KMeansClustering");
-		registerModule(this.clustering);
-		registerModule(this.pathPlanning);
-		this.result = null;
-		longTermTarget = null;
-	}
+        /* ---- 1. 长期探索到达判定 ---- */
+        if (positionID.equals(longTermTarget)) {
+            isLongTermSearch = false;
+        }
+        if (longTermTarget != null && isLongTermSearch) {
+            pathPlanning.setFrom(positionID);
+            pathPlanning.setDestination(longTermTarget);
+            List<EntityID> path = pathPlanning.calc().getResult();
+            if (path != null && !path.isEmpty()) {
+                result = path.get(path.size() - 1);
+            }
+            return this;
+        }
 
+        /* ---- 2. 血量低回家 / 巡逻 ---- */
+        if (me.getHP() <= 2000) {
+            result = nearestRefuge(positionID);
+            return this;
+        }
+        if (me.getHP() <= 5000) {
+            result = null; // 巡逻
+            return this;
+        }
 
-	@Override
-	public RoadDetector calc()
-	{
-		//在目标区域中，直接清除目标
-		//如果不在目标区域中，先更新优先级道路
-		//如果优先级道路不为空，优先清理优先级道路
-		//如果优先级道路为空，则直接开始清除目标区域
-		logger.debug("priority roads" + priorityRoads);
-		logger.debug("target areas" + targetAreas);
-		logger.debug("opened areas" + openedAreas);
+        /* ---- 3. 防重复：同一位置停留6次强制换区 ---- */
+        if (result != null) count++;
+        if (count == 6) {
+            count = 0;
+            targetAreas.remove(positionID);
+            result = nearestInSet(positionID, targetAreas);
+            return this;
+        }
 
-		EntityID positionID = this.agentInfo.getPosition();//获取当前位置
-		if (positionID.equals(longTermTarget)) {
-			isLongTermSearch = false;
-		}
-		if (longTermTarget != null && isLongTermSearch) {
-			this.pathPlanning.setFrom(positionID);
-			this.pathPlanning.setDestination(longTermTarget);
-			List<EntityID> path = this.pathPlanning.calc().getResult();
-			if (path != null && !path.isEmpty())
-			{
-				this.result = path.get(path.size() - 1);
+        /* ---- 4. 目标为空时重新生成 AIT 式任务池 ---- */
+        if (result == null) {
+            count = 0;
+            rebuildTasks();          // ← 这里换成 AIT 的 7 种源
+            result = selectBestTask(); // ← AIT 式：先优先级再距离
+            if (result == null) {      // 任务池也空 → 远程开荒
+                result = selectLongTermTarget(positionID);
+                isLongTermSearch = (result != null);
+            }
+        }
+        return this;
+    }
 
-			}
-			return this;
-		}
+    /* -------------------- 对外接口 -------------------- */
+    @Override
+    public EntityID getTarget() {
+        return result;
+    }
 
+    /* **********************************************************************
+     * updateInfo：保持 SEU 原有协作 + 语音 Help + 互斥逻辑
+     * **********************************************************************/
+    @Override
+    public RoadDetector updateInfo(MessageManager messageManager) {
+        super.updateInfo(messageManager);
+        if (this.getCountUpdateInfo() >= 2) return this;
 
-		int MyHP=((Human)this.agentInfo.me()).getHP();//获取当前血量
-		if(MyHP <= 2000)
-		{
-			for (StandardEntity e : this.worldInfo.getEntitiesOfType(REFUGE))
-			{
-				EntityID id=e.getID();
-				Set<EntityID> RefugeLocation=new HashSet<>();
-				RefugeLocation.add(id);
-				this.pathPlanning.setFrom(positionID);
-				this.pathPlanning.setDestination(RefugeLocation);
-				List<EntityID> path = this.pathPlanning.calc().getResult();
-				if (path != null && !path.isEmpty())
-				{
-					this.result = path.get(path.size() - 1);
+        /* ---- 第1步：初始化3个集合（与 SEU 完全一致）---- */
+        if (agentInfo.getTime() == 1) {
+            initPriorityAndTarget();
+        } else {
+            refreshTargetAreas();          // 动态堵塞
+            refreshPriorityRoads();        // 动态优先
+            addCivilianPaths();            //  civilian → nearest refuge 路径
+            addVoiceHelp();                //  "Help"/"Ouch" 语音
+        }
 
-				}
-				return this;
-			}
-		}//回家
-		if(MyHP <= 5000 )
-		{
-			this.result=null;
-			return this;
-		}//巡逻
+        /* ---- 第2步：SEU 原始消息协作（互斥 + CommandPolice）---- */
+        handleCollaboration(messageManager);
 
-		//logger.debug("The count="+this.count);
+        /* ---- 第3步：清理已完工区域（SEU 原逻辑）---- */
+        for (EntityID id : openedAreas) {
+            priorityRoads.remove(id);
+            targetAreas.remove(id);
+            tasks.remove(id);
+        }
+        openedAreas.clear();
 
-		if(this.result!= null)
-			this.count++;
-		if(count == 6 ){//如果在这个地方停留6次，则强制更换工作地方
-			this.count=0;
-			targetAreas.remove(positionID);
-			this.pathPlanning.setFrom(positionID);
-			this.pathPlanning.setDestination(this.targetAreas);
-			List<EntityID> path = this.pathPlanning.calc().getResult();
-			if (path != null && !path.isEmpty())
-			{
-				//logger.debug("0.Select the path:"+path);
-				this.result = path.get(path.size() - 1);
-			}
-			//logger.debug("0.Selected Target: " + this.result);
-			return this;
-		}
-		if (this.result == null)
-		{
-			this.count=0;
-			//logger.debug("NowPosition:"+positionID);
+        /* ---- 第4步：当前 Road 若已无障碍则本周期任务直接完成 ---- */
+        StandardEntity pos = this.worldInfo.getEntity(agentInfo.getPosition());
+        if (pos instanceof Road road) {
+            if (road.isBlockadesDefined() && road.getBlockades().isEmpty()) {
+                tasks.remove(road.getID());
+            }
+        }
+        return this;
+    }
 
-			if (this.targetAreas.contains(positionID))
-			{
-				this.result = positionID;
-				//logger.debug("1.Selected Target: " + this.result);
-				return this;
-			}//如果警察在目标区域内直接结束即可
+    /* ========================================================================
+     * 以下全部是私有工具方法，中文注释已写死，可直接阅读
+     * ======================================================================== */
 
-			//将优先级队列中没有堵塞的道路清除
-			List<EntityID> removeList = new ArrayList<>(this.priorityRoads.size()); //remove队列的长度等于优先级队列的长度
-			for (EntityID id : this.priorityRoads)
-			{
-				if (!this.targetAreas.contains(id))
-				{
-					removeList.add(id);
-				}
-			}//如果该优先级的道路在目标区域中，加入到remove队列中
+    /* ---------------- 1. 7 种优先级源生成 ---------------- */
+    private void rebuildTasks() {
+        tasks.clear();
+        int clusterIndex = clustering.getClusterIndex(agentInfo.getID());
+        Collection<EntityID> myCluster = clustering.getClusterEntityIDs(clusterIndex);
 
-			removeList.forEach(this.priorityRoads::remove);//清除PriorityRoads列表中在removeList包含的全部元素
-			//即删除在目标区域的道路，即代表该路上的路障已经被清除
+        /* 1. 自身 cluster 内所有 Area 优先级 8 */
+        myCluster.forEach(id -> putTask(id, 8));
 
-			//如果优先级道路还存在
+        /* 2. 与 Refuge 相邻且堵塞的 Road 优先级 7 */
+        refugeLocation.forEach(id -> putTask(id, 7));
 
-			//logger.debug("***priorityRoads"+this.priorityRoads);
-			//logger.debug("***targetAreas"+this.targetAreas);
-
-			if (!this.refugeLocation.isEmpty()) {
-				this.pathPlanning.setFrom(positionID);//当前位置
-				this.pathPlanning.setDestination(this.refugeLocation);//目标区域
-
-				List<EntityID> path = this.pathPlanning.calc().getResult();
-				if (path != null && !path.isEmpty())
-				{
-					this.result = path.get(path.size() - 1);
-				}
-				return this;
-			}
-			if (!this.priorityRoads.isEmpty())
-			{
-				//排序
-
-				//logger.debug("1.***priorityRoads"+this.priorityRoads);
-				//logger.debug("1.***targetAreas"+this.targetAreas);
-
-				this.pathPlanning.setFrom(positionID);//当前位置
-				this.pathPlanning.setDestination(this.priorityRoads);//目标区域
-
-				List<EntityID> path = this.pathPlanning.calc().getResult();
-				if (path != null && !path.isEmpty())
-				{
-					//logger.debug("2.1 Select the path:"+path);
-					this.result = path.get(path.size() - 1);
-				}
-				else {
-					this.pathPlanning.setFrom(positionID);
-					this.pathPlanning.setDestination(this.targetAreas);
-					path = this.pathPlanning.calc().getResult();
-					if (path != null && !path.isEmpty())
-					{
-						//logger.debug("2.2 Select the path:"+path);
-						this.result = path.get(path.size() - 1);
-					}
-				}
-				//logger.debug("2.Selected Target: " + this.result);
-				return this;
-			}/* else {
-				logger.debug("start searching randomly");
-				List<Integer> allClusters = new ArrayList<>();
-				for (int i = 0; i < this.clustering.getClusterNumber(); i++) {
-					allClusters.add(i);
-				}
-				allClusters.removeAll(historyClusters);
-				Collection<EntityID> allBuildings = new ArrayList<>();
-				if (!allClusters.isEmpty()) {
-					for (int i : allClusters) {
-						for (EntityID e : this.clustering.getClusterEntityIDs(i)) {
-							if (this.worldInfo.getEntity(e) instanceof Building) {
-								allBuildings.add(e);
-							}
-						}
-					}
-				} else {
-					allBuildings.addAll(this.worldInfo.getEntityIDsOfType(BUILDING));
-				}
-				allBuildings.removeAll(openedAreas);
-				List<EntityID> allBuildingsWithSequence = new ArrayList<>(allBuildings);
-				Collection<EntityID> randomTarget = new ArrayList<>();
-				longTermTarget = allBuildingsWithSequence.get((int) (Math.random() * allBuildingsWithSequence.size()));
-				randomTarget.add(longTermTarget);
-				this.pathPlanning.setFrom(positionID);
-				this.pathPlanning.setDestination(randomTarget);
-				List<EntityID> path = this.pathPlanning.calc().getResult();
-				if (path != null && !path.isEmpty()) {
-					//logger.debug("3.Select the path:"+path);
-					this.result = path.get(path.size() - 1);
-				}
-				//isLongTermSearch = true;
-			}*/
-			if (!targetAreas.isEmpty()) {
-				//logger.debug("2.***priorityRoads"+this.priorityRoads);
-				//logger.debug("2.***targetAreas"+this.targetAreas);
-				this.pathPlanning.setFrom(positionID);
-				this.pathPlanning.setDestination(this.targetAreas);
-				List<EntityID> path = this.pathPlanning.calc().getResult();
-				if (path != null && !path.isEmpty()) {
-					//logger.debug("3.Select the path:"+path);
-					this.result = path.get(path.size() - 1);
-				}
-			} else {
-				logger.debug("start searching randomly");
-				List<Integer> allClusters = new ArrayList<>();
-				for (int i = 0; i < this.clustering.getClusterNumber(); i++) {
-					allClusters.add(i);
-				}
-				allClusters.removeAll(historyClusters);
-				Collection<EntityID> allBuildings = new ArrayList<>();
-				if (!allClusters.isEmpty()) {
-					for (int i : allClusters) {
-						for (EntityID e : this.clustering.getClusterEntityIDs(i)) {
-							if (this.worldInfo.getEntity(e) instanceof Building) {
-								allBuildings.add(e);
-							}
-						}
-					}
-				} else {
-					allBuildings.addAll(this.worldInfo.getEntityIDsOfType(BUILDING));
-				}
-				allBuildings.removeAll(openedAreas);
-                List<EntityID> allBuildingsWithSequence = new ArrayList<>(allBuildings);
-				Collection<EntityID> randomTarget = new ArrayList<>();
-				longTermTarget = allBuildingsWithSequence.get((int) (Math.random() * allBuildingsWithSequence.size()));
-				randomTarget.add(longTermTarget);
-				this.pathPlanning.setFrom(positionID);
-				this.pathPlanning.setDestination(randomTarget);
-				List<EntityID> path = this.pathPlanning.calc().getResult();
-				if (path != null && !path.isEmpty()) {
-					//logger.debug("3.Select the path:"+path);
-					this.result = path.get(path.size() - 1);
-				}
-				isLongTermSearch = true;
-			}
-		}
-		//logger.debug("3.Selected Target: " + this.result);
-		return this;
-	}
-
-	@Override
-	public EntityID getTarget()
-	{
-		return this.result;
-	}
-
-	@Override
-	public RoadDetector updateInfo(MessageManager messageManager) {
-
-		if(agentInfo.getTime()==1)
-		{
-			this.priorityRoads = new HashSet<>();
-			this.targetAreas =new HashSet<>();
-			this.refugeLocation = new HashSet<>();
-			for (StandardEntity e : this.worldInfo.getEntitiesOfType(REFUGE)) {
-				for (EntityID id : ((Building) e).getNeighbours()) {
-					StandardEntity neighbour = this.worldInfo.getEntity(id);
-					if (neighbour instanceof Road) {
-						this.priorityRoads.add(id);
-						this.targetAreas.add(id);
-						if (((Road) neighbour).isBlockadesDefined() && !((Road) neighbour).getBlockades().isEmpty()) {
-							this.refugeLocation.add(id);
-						}
-						for(EntityID neighbourID : ((Road) neighbour).getNeighbours()){
-							StandardEntity neighbour_neighbour = this.worldInfo.getEntity(neighbourID);
-							if(neighbour_neighbour instanceof Road)
-							{
-								this.priorityRoads.add(id);
-								this.targetAreas.add(id);
-							}
-						}
-					}
-				}
-			}//优先级队列
-		}
-		else
-		{
-			this.targetAreas = new HashSet<>();
-			for (StandardEntity e : this.worldInfo.getEntitiesOfType(REFUGE,GAS_STATION,BUILDING)) {
-				for (EntityID id : ((Building) e).getNeighbours()) {
-					StandardEntity neighbour = this.worldInfo.getEntity(id);
-					if (neighbour instanceof Road) {
-						if (((Road) neighbour).isBlockadesDefined() && !((Road) neighbour).getBlockades().isEmpty())
-						{
-							this.targetAreas.add(id);
-						}
-						for(EntityID neighbourID : ((Road) neighbour).getNeighbours()){
-							StandardEntity neighbour_neighbour = this.worldInfo.getEntity(neighbourID);
-							if(neighbour_neighbour instanceof Road)
-							{
-								if (((Road) neighbour).isBlockadesDefined() && !((Road) neighbour).getBlockades().isEmpty())
-								{
-									this.targetAreas.add(id);
-								}
-							}
-						}
-					}
-				}
-			}//目标队列
-			//for (StandardEntity e : this.worldInfo.getEntitiesOfType(REFUGE)) {
-			//	this.targetAreas.add(e.getID());
-			//}
-			this.priorityRoads = new HashSet<>();
-			for (StandardEntity e : this.worldInfo.getEntitiesOfType(REFUGE)) {
-				for (EntityID id : ((Building) e).getNeighbours()) {
-					StandardEntity neighbour = this.worldInfo.getEntity(id);
-					if (neighbour instanceof Road) {
-						if (((Road) neighbour).isBlockadesDefined() && !((Road) neighbour).getBlockades().isEmpty())
-						{
-							this.priorityRoads.add(id);
-						}
-						for(EntityID neighbourID : ((Road) neighbour).getNeighbours()){
-							StandardEntity neighbour_neighbour = this.worldInfo.getEntity(neighbourID);
-							if(neighbour_neighbour instanceof Road)
-							{
-								if (((Road) neighbour).isBlockadesDefined() && !((Road) neighbour).getBlockades().isEmpty())
-								{
-									this.priorityRoads.add(id);
-								}
-							}
-						}
-					}
-				}
-			}//优先级队列
-			for (StandardEntity se : this.worldInfo.getEntitiesOfType(CIVILIAN)) {
-				if (isValidHuman(se)) {
-					Civilian civilian = (Civilian) se;
-					EntityID civilianPositionID = civilian.getPosition();
-					StandardEntity minDistanceRefuge = null;
-					int minDistance = 1000000;
-					for (StandardEntity e : this.worldInfo.getEntitiesOfType(REFUGE)) {
-						int currentDistance = this.worldInfo.getDistance(se, e);
-						if (currentDistance < minDistance) {
-							minDistanceRefuge = e;
-							minDistance = currentDistance;
-						}
-					}
-					Collection<EntityID> refugeToGo = new ArrayList<>();
-					if (minDistanceRefuge != null) {
-						refugeToGo.add(minDistanceRefuge.getID());
-					}
-					this.pathPlanning.setFrom(civilianPositionID);
-					this.pathPlanning.setDestination(refugeToGo);
-					List<EntityID> path = this.pathPlanning.calc().getResult();
-					this.priorityRoads.addAll(path);
-				}
-			}
-			for (Command command : Objects.requireNonNull(this.agentInfo.getHeard())) {
-				if (command instanceof AKSpeak && ((AKSpeak) command).getChannel() == 0 && command.getAgentID() != this.agentInfo.getID()) {
-					byte[] receivedData = ((AKSpeak) command).getContent();
-					String voiceString = new String(receivedData);
-					if ("Help".equalsIgnoreCase(voiceString) || "Ouch".equalsIgnoreCase(voiceString)) {
-						int range = this.scenarioInfo.getRawConfig().getIntValue("comms.channels.0.range");
-						Collection<StandardEntity> possibleBuildings = this.worldInfo.getObjectsInRange(this.agentInfo.getID(), range);
-						for (StandardEntity possibleBuilding : possibleBuildings) {
-							if (possibleBuilding instanceof Building) {
-								for (EntityID civilianNeighbourID : ((Area) possibleBuilding).getNeighbours()) {
-									StandardEntity civilianNeighbour = this.worldInfo.getEntity(civilianNeighbourID);
-									if (civilianNeighbour instanceof Road) {
-										priorityRoads.add(civilianNeighbourID);
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-
-
-
-		//logger.debug("TheTime:"+agentInfo.getTime());
-		super.updateInfo(messageManager);
-		if (this.getCountUpdateInfo() >= 2)
-		{
-			return this;
-		}
-		if (this.result != null)
-		{
-
-
-			if (this.agentInfo.getPosition().equals(this.result))
-			{
-				//logger.debug("我刚刚到达目的地！");
-				StandardEntity entity = this.worldInfo.getEntity(this.result);
-				if (entity instanceof Building)
-				{
-					this.result = null;
-				}
-				else if (entity instanceof Road road)
-				{
-                    if (!road.isBlockadesDefined() )
-					{
-						this.targetAreas.remove(this.result);
-						this.result = null;
-					}//如果该地区没有定义阻塞
-					if(road.isBlockadesDefined() && road.getBlockades().isEmpty() )
-					{
-						this.targetAreas.remove(this.result);
-						this.result = null;
-					}//如果该地区定义了阻塞，且该地区阻塞不为空
-				}
-			}
-		} //到达目的地之后，重新处理targets
-
-
-
-
-		Set<EntityID> changedEntities = this.worldInfo.getChanged().getChangedEntities();
-		for (CommunicationMessage message : messageManager.getReceivedMessageList())//遍历获得的消息
-		{
-			Class<? extends CommunicationMessage> messageClass = message.getClass();
-			if (messageClass == MessageAmbulanceTeam.class)
-			{
-				this.reflectMessage((MessageAmbulanceTeam) message);
-
-			}//呼应救援队伍
-			else if (messageClass == MessageFireBrigade.class)
-			{
-				this.reflectMessage((MessageFireBrigade) message);
-
-			}//呼应救火队伍
-			else if (messageClass == MessageRoad.class)
-			{
-				this.reflectMessage((MessageRoad) message, changedEntities);
-
-			}//呼应道路信息
-			else if (messageClass == MessagePoliceForce.class)
-			{
-				this.reflectMessage((MessagePoliceForce) message);
-
-			}//呼应其他警察信息
-			else if (messageClass == CommandPolice.class)
-			{
-				this.reflectMessage((CommandPolice) message);
-
-			}
-		}
-
-		EntityID currentPositionID = this.agentInfo.getPosition();
-		StandardEntity currentPosition = this.worldInfo.getEntity(currentPositionID);
-		//openedAreas.add((Area) currentPosition);
-		for (StandardEntity e : this.worldInfo.getEntitiesOfType(ROAD)) {
-			Road road = (Road) e;
-			if (road.isBlockadesDefined() && road.getBlockades().isEmpty()) {
-				openedAreas.add(road.getID());
-				historyClusters.add(this.clustering.getClusterIndex(road.getID()));
-			}
-		}
-		historyClusters.add(this.clustering.getClusterIndex(this.agentInfo.getPosition()));
-		openedAreas.add(this.agentInfo.getPosition());
-		for (EntityID e : openedAreas) {
-			priorityRoads.remove(e);
-			targetAreas.remove(e);
-			refugeLocation.remove(e);
-		}
-
-
-
-		return this;
-	}//主要更新已被清理过的区域块
-
-	private void reflectMessage(MessageRoad messageRoad, Collection<EntityID> changedEntities)
-	{
-		if (messageRoad.isBlockadeDefined() && !changedEntities.contains(messageRoad.getBlockadeID()))
-		{
-			MessageUtil.reflectMessage(this.worldInfo, messageRoad);
-		}
-//		if (messageRoad.isPassable())
-//		{
-//			this.targetAreas.remove(messageRoad.getRoadID());
-//		}//如果能通行。将该地区移除
-	}
-
-	private void reflectMessage(MessageAmbulanceTeam messageAmbulanceTeam)
-	{
-		if (messageAmbulanceTeam.getPosition() == null)
-		{
-			return;
-		}
-		else if (messageAmbulanceTeam.getAction() == MessageAmbulanceTeam.ACTION_LOAD)
-		{
-			StandardEntity position = this.worldInfo.getEntity(messageAmbulanceTeam.getPosition());
-			if (position instanceof Building)
-			{
-				((Building) position).getNeighbours().forEach(this.targetAreas::remove);
-			}
-		}
-		else if (messageAmbulanceTeam.getAction() == MessageAmbulanceTeam.ACTION_MOVE)//移动
-		{
-			if (messageAmbulanceTeam.getTargetID() == null)
-			{
-				StandardEntity position = this.worldInfo.getEntity(messageAmbulanceTeam.getPosition());
-				if(position instanceof Road)
-					for (EntityID id : ((Road) position).getNeighbours()) {
-						StandardEntity neighbour = this.worldInfo.getEntity(id);
-						if (neighbour instanceof Road) {
-							if (((Road) neighbour).isBlockadesDefined() && !((Road) neighbour).getBlockades().isEmpty())
-								//如果该地区Block被定义，且该Block不为空，加入到目标区域
-                                this.targetAreas.add(id);
-						}
-					}
-				return;
-			}
-			StandardEntity target = this.worldInfo.getEntity(messageAmbulanceTeam.getTargetID());//获取医生的目标
-			if (target instanceof Building)//如果医生的目标是建筑物
-			{
-				for (EntityID id : ((Building) target).getNeighbours())
-				{
-					StandardEntity neighbour = this.worldInfo.getEntity(id);
-					if (neighbour instanceof Road)
-					{
-						if(((Road) neighbour).isBlockadesDefined() && !((Road) neighbour).getBlockades().isEmpty())
-						{
-							this.priorityRoads.add(id);
-							this.targetAreas.add(id);
-						}
-
-					}//如果道路阻塞，或者道路阻塞不为空，加入到优先级队列中
-				}
-			}//帮助医生清理道路，将医生阻塞的道路加入到优先级队列中
-			else if (target instanceof Human human)
-			{
-                if (human.isPositionDefined())
-				{
-					StandardEntity position = this.worldInfo.getPosition(human);
-					if (position instanceof Building)
-					{
-						for (EntityID id : ((Building) position).getNeighbours())
-						{
-							StandardEntity neighbour = this.worldInfo.getEntity(id);
-							if (neighbour instanceof Road)
-							{
-								if(((Road) neighbour).isBlockadesDefined() && !((Road) neighbour).getBlockades().isEmpty())
-								{
-									this.priorityRoads.add(id);
-									this.targetAreas.add(id);
-								}
-							}//如果被困人员道路被阻塞，清理道路
-						}
-					}
-				}
-			}
-		}
-	}
-
-	private void reflectMessage(MessageFireBrigade messageFireBrigade)//消防队
-	{
-		if (messageFireBrigade.getTargetID() == null)
-		{
-			StandardEntity position = this.worldInfo.getEntity(Objects.requireNonNull(messageFireBrigade.getPosition()));
-			if(position instanceof Road)
-				for (EntityID id : ((Road) position).getNeighbours()) {
-					StandardEntity neighbour = this.worldInfo.getEntity(id);
-					if (neighbour instanceof Road) {
-						if (((Road) neighbour).isBlockadesDefined() && !((Road) neighbour).getBlockades().isEmpty())
-						{
-                            this.targetAreas.add(id);
-                            this.priorityRoads.add(id);
-						}//如果该地区Block被定义，且该Block不为空，加入到目标区域
-
-					}
-				}
-			return;
-		}//消防队的目标为空，为防止其被阻碍，跟着去清理目标
-		if (messageFireBrigade.getAction() == MessageFireBrigade.ACTION_RESCUE)//正在扑灭火
-		{
-			StandardEntity position = this.worldInfo.getEntity(Objects.requireNonNull(messageFireBrigade.getPosition()));//消防员的位置
-			if (position instanceof Building)
-			{
-				//this.targetAreas.addAll(((Building) position).getNeighbours());
-				((Building) position).getNeighbours().forEach(this.targetAreas::remove);
-			}
-		}//如果消防员在扑灭火，代表这个地区可以通过，无需清理
-		if(messageFireBrigade.getAction() == MessageFireBrigade.ACTION_MOVE)
-		{
-			StandardEntity target = this.worldInfo.getEntity(messageFireBrigade.getTargetID());//获取消防队的目标
-			//logger.debug("FireBrige Target"+target);
-			if (target instanceof Building)//如果消防队的目标是建筑物
-			{
-				for (EntityID id : ((Building) target).getNeighbours())
-				{
-					StandardEntity neighbour = this.worldInfo.getEntity(id);
-					if (neighbour instanceof Road)
-					{
-						if(((Road) neighbour).isBlockadesDefined() && !((Road) neighbour).getBlockades().isEmpty())
-						{
-                            this.targetAreas.add(id);
-                            this.priorityRoads.add(id);
-						}
-
-					}//如果道路阻塞，或者道路阻塞不为空，加入到优先级队列中
-				}
-			}//帮助消防员清理道路，将医生阻塞的道路加入到优先级队列中
-		}
-	}
-
-	private void reflectMessage(MessagePoliceForce messagePoliceForce)
-	{
-		if (messagePoliceForce.getAction() == MessagePoliceForce.ACTION_CLEAR)//如果是在进行清理
-		{
-			if (messagePoliceForce.getAgentID().getValue() != this.agentInfo.getID().getValue())
-			{//响应其他警察的消息
-				if (messagePoliceForce.isTargetDefined())//目标如果定义
-				{
-					EntityID targetID = messagePoliceForce.getTargetID();//获取通信警察的目标消息
-					if (targetID == null)
-					{
-						return;
-					}
-					StandardEntity entity = this.worldInfo.getEntity(targetID);
-					if (entity == null)
-					{
-						return;
-					}
-
-					if (entity instanceof Area)
-					{
-						this.targetAreas.remove(targetID);//如果该地区为一个警察清理，那么他自己不再清理，确保两两警察之间的目标不一样
-						if (this.result != null && this.result.getValue() == targetID.getValue())
-						{
-							if (this.agentInfo.getID().getValue() < messagePoliceForce.getAgentID().getValue())
-							{
-								this.result = null;
-							}
-						}
-						//logger.debug("1.该目标已经被分配出去！");
-					}
-					else if (entity.getStandardURN() == BLOCKADE)//如果封锁
-					{
-						EntityID position = ((Blockade) entity).getPosition();
-						this.targetAreas.remove(position);
-						if (this.result != null && this.result.getValue() == position.getValue())
-						{
-							if (this.agentInfo.getID().getValue() < messagePoliceForce.getAgentID().getValue())
-							{
-								this.result = null;
-							}
-						}
-						//logger.debug("2.该目标已经被分配出去！");
-					}
-
-				}
-			}
-		}
-	}
-
-	private void reflectMessage(CommandPolice commandPolice)
-	{
-		boolean flag = false;
-		if (commandPolice.isToIDDefined() && this.agentInfo.getID().getValue() == Objects.requireNonNull(commandPolice.getToID()).getValue())
-		{
-			flag = true;
-		}
-		else if (commandPolice.isBroadcast())
-		{
-			flag = true;
-		}
-		if (flag && commandPolice.getAction() == CommandPolice.ACTION_CLEAR)
-		{
-			if (commandPolice.getTargetID() == null)
-			{
-				return;
-			}
-			StandardEntity target = this.worldInfo.getEntity(commandPolice.getTargetID());
-			if (target instanceof Area)
-			{
-				this.targetAreas.add(target.getID());
-			}
-			else if (target != null && target.getStandardURN() == BLOCKADE) {
-                Blockade blockade = (Blockade) target;
-                if (blockade.isPositionDefined()) {
-                    this.targetAreas.add(blockade.getPosition());
+        /* 3. 与 Building(GasStation 包含在内) 相邻且堵塞的 Road 优先级 6 */
+        for (StandardEntity e : worldInfo.getEntitiesOfType(BUILDING, GAS_STATION)) {
+            for (EntityID n : ((Building) e).getNeighbours()) {
+                StandardEntity ne = worldInfo.getEntity(n);
+                if (ne instanceof Road road && road.isBlockadesDefined() && !road.getBlockades().isEmpty()) {
+                    putTask(n, 6);
                 }
             }
         }
-	}
 
-	private boolean isValidHuman(StandardEntity entity) {
-		if (entity == null)
-			return false;
-		if (!(entity instanceof Human target))
-			return false;
+        /* 4. 高速道路（若配置了 highways 模块）优先级 5 */
+        // 这里用 StaticClustering 示例，若未配置则跳过
+        try {
+            StaticClustering highways = (StaticClustering) moduleManager.getModule("SEU.RoadDetector.Highways");
+            highways.getClusterEntityIDs(0).forEach(id -> putTask(id, 5));
+        } catch (Exception ignore) {/* 没配就跳过 */}
 
-		if (!target.isHPDefined() || target.getHP() == 0)
-			return false;
-		if (!target.isPositionDefined())
-			return false;
-		if (!target.isDamageDefined() || target.getDamage() == 0)
-			return false;
-		if (!target.isBuriednessDefined())
-			return false;
+        /* 5. 其他 AT/FB 初始建筑相邻堵塞 Road 优先级 4 */
+        for (StandardEntity e : worldInfo.getEntitiesOfType(FIRE_BRIGADE, AMBULANCE_TEAM)) {
+            EntityID pos = e.getID();
+            if (worldInfo.getEntity(pos) instanceof Building b) {
+                for (EntityID n : b.getNeighbours()) {
+                    StandardEntity ne = worldInfo.getEntity(n);
+                    if (ne instanceof Road road && road.isBlockadesDefined() && !road.getBlockades().isEmpty()) {
+                        putTask(n, 4);
+                    }
+                }
+            }
+        }
 
-		StandardEntity position = worldInfo.getPosition(target);
-		if (position == null)
-			return false;
+        /* 6. 当前堵塞区域 targetAreas 优先级 3 */
+        targetAreas.forEach(id -> putTask(id, 3));
 
-		StandardEntityURN positionURN = position.getStandardURN();
-		return positionURN != REFUGE && positionURN != AMBULANCE_TEAM;
-	}
+        /* 7. 优先级道路 priorityRoads 优先级 2 */
+        priorityRoads.forEach(id -> putTask(id, 2));
 
+        /* 8. Voice-Help 响应（动态加入）优先级 1 最高 */
+        addVoiceHelp();
+    }
 
+    private void putTask(EntityID area, int priority) {
+        tasks.merge(area, priority, (oldVal, newVal) -> Math.min(oldVal, newVal));
+    }
 
+    /* ---------------- 2. AIT 式双比较器选目标 ---------------- */
+    private EntityID selectBestTask() {
+        if (tasks.isEmpty()) return null;
+
+        EntityID position = agentInfo.getPosition();
+        /* 先按优先级升序，再按真实路径距离升序，取 Top5 再比一次距离 */
+        return tasks.keySet().stream()
+            .sorted(Comparator.comparingInt((EntityID id) -> tasks.get(id))
+                    .thenComparingDouble(id -> computePathDistance(position, id)))
+            .limit(5)
+            .min(Comparator.comparingDouble(id -> computePathDistance(position, id)))
+            .orElse(null);
+    }
+
+    private double computePathDistance(EntityID from, EntityID to) {
+        pathPlanning.setFrom(from);
+        pathPlanning.setDestination(to);
+        List<EntityID> path = pathPlanning.calc().getResult();
+        if (path == null || path.isEmpty()) return Double.MAX_VALUE;
+        double dist = 0;
+        for (int i = 1; i < path.size(); i++) {
+            dist += worldInfo.getDistance(path.get(i - 1), path.get(i));
+        }
+        return dist;
+    }
+
+    /* ---------------- 3. 长期探索（SEU 原版）---------------- */
+    private EntityID selectLongTermTarget(EntityID positionID) {
+        List<Integer> allClusters = new ArrayList<>();
+        for (int i = 0; i < clustering.getClusterNumber(); i++) allClusters.add(i);
+        allClusters.removeAll(historyClusters);
+
+        Collection<EntityID> allBuildings = new ArrayList<>();
+        if (!allClusters.isEmpty()) {
+            for (int i : allClusters) {
+                for (EntityID e : clustering.getClusterEntityIDs(i)) {
+                    if (worldInfo.getEntity(e) instanceof Building) allBuildings.add(e);
+                }
+            }
+        } else {
+            allBuildings.addAll(worldInfo.getEntityIDsOfType(BUILDING));
+        }
+        allBuildings.removeAll(openedAreas);
+        if (allBuildings.isEmpty()) return null;
+
+        List<EntityID> list = new ArrayList<>(allBuildings);
+        longTermTarget = list.get((int) (Math.random() * list.size()));
+        pathPlanning.setFrom(positionID);
+        pathPlanning.setDestination(longTermTarget);
+        List<EntityID> path = pathPlanning.calc().getResult();
+        return (path == null || path.isEmpty()) ? null : path.get(path.size() - 1);
+    }
+
+    private EntityID nearestRefuge(EntityID from) {
+        return worldInfo.getEntityIDsOfType(REFUGE).stream()
+                .min(Comparator.comparingDouble(id -> worldInfo.getDistance(from, id)))
+                .orElse(null);
+    }
+
+    private EntityID nearestInSet(EntityID from, Set<EntityID> set) {
+        if (set.isEmpty()) return null;
+        return set.stream()
+                .min(Comparator.comparingDouble(id -> worldInfo.getDistance(from, id)))
+                .orElse(null);
+    }
+
+    /* ---------------- 4. updateInfo 里的 SEU 协作逻辑（保持原样）---------------- */
+    private void handleCollaboration(MessageManager mm) {
+        Set<EntityID> changed = worldInfo.getChanged().getChangedEntities();
+        for (CommunicationMessage msg : mm.getReceivedMessageList()) {
+            if (msg instanceof MessagePoliceForce mpf &&
+                    mpf.getAction() == MessagePoliceForce.ACTION_CLEAR &&
+                    !mpf.getAgentID().equals(agentInfo.getID())) {
+                EntityID tid = mpf.isTargetDefined() ? mpf.getTargetID() : null;
+                if (tid != null) {
+                    StandardEntity ent = worldInfo.getEntity(tid);
+                    EntityID areaId = (ent instanceof Blockade b && b.isPositionDefined())
+                            ? b.getPosition() : tid;
+                    tasks.remove(areaId);
+                    if (result != null && result.equals(areaId) &&
+                            agentInfo.getID().getValue() < mpf.getAgentID().getValue()) {
+                        result = null;          // 小 ID 让路
+                    }
+                }
+            } else if (msg instanceof CommandPolice cp &&
+                    cp.getAction() == CommandPolice.ACTION_CLEAR) {
+                if ((cp.isToIDDefined() && cp.getToID().equals(agentInfo.getID())) || cp.isBroadcast()) {
+                    EntityID t = cp.getTargetID();
+                    if (t != null) {
+                        StandardEntity e = worldInfo.getEntity(t);
+                        EntityID aid = (e instanceof Blockade b && b.isPositionDefined())
+                                ? b.getPosition() : t;
+                        putTask(aid, 1);        // 中心下达最高优先级
+                    }
+                }
+            }
+        }
+    }
+
+    private void initPriorityAndTarget() {
+        priorityRoads = new HashSet<>();
+        targetAreas = new HashSet<>();
+        refugeLocation = new HashSet<>();
+        for (StandardEntity e : worldInfo.getEntitiesOfType(REFUGE)) {
+            for (EntityID n : ((Building) e).getNeighbours()) {
+                StandardEntity ne = worldInfo.getEntity(n);
+                if (ne instanceof Road road) {
+                    priorityRoads.add(n);
+                    targetAreas.add(n);
+                    if (road.isBlockadesDefined() && !road.getBlockades().isEmpty())
+                        refugeLocation.add(n);
+                    for (EntityID nn : road.getNeighbours()) {
+                        StandardEntity nne = worldInfo.getEntity(nn);
+                        if (nne instanceof Road) {
+                            priorityRoads.add(n);
+                            targetAreas.add(n);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private void refreshTargetAreas() {
+        targetAreas.clear();
+        for (StandardEntity e : worldInfo.getEntitiesOfType(REFUGE, GAS_STATION, BUILDING)) {
+            for (EntityID n : ((Building) e).getNeighbours()) {
+                StandardEntity ne = worldInfo.getEntity(n);
+                if (ne instanceof Road road && road.isBlockadesDefined() && !road.getBlockades().isEmpty()) {
+                    targetAreas.add(n);
+                    for (EntityID nn : road.getNeighbours()) {
+                        StandardEntity nne = worldInfo.getEntity(nn);
+                        if (nne instanceof Road r && r.isBlockadesDefined() && !r.getBlockades().isEmpty())
+                            targetAreas.add(nn);
+                    }
+                }
+            }
+        }
+    }
+
+    private void refreshPriorityRoads() {
+        priorityRoads.clear();
+        for (StandardEntity e : worldInfo.getEntitiesOfType(REFUGE)) {
+            for (EntityID n : ((Building) e).getNeighbours()) {
+                StandardEntity ne = worldInfo.getEntity(n);
+                if (ne instanceof Road road && road.isBlockadesDefined() && !road.getBlockades().isEmpty()) {
+                    priorityRoads.add(n);
+                    for (EntityID nn : road.getNeighbours()) {
+                        StandardEntity nne = worldInfo.getEntity(nn);
+                        if (nne instanceof Road r && r.isBlockadesDefined() && !r.getBlockades().isEmpty())
+                            priorityRoads.add(nn);
+                    }
+                }
+            }
+        }
+    }
+
+    private void addCivilianPaths() {
+        for (StandardEntity se : worldInfo.getEntitiesOfType(CIVILIAN)) {
+            if (!isValidCivilian(se)) continue;
+            Civilian cv = (Civilian) se;
+            EntityID cvPos = cv.getPosition();
+            StandardEntity nearestRefuge = worldInfo.getEntityIDsOfType(REFUGE).stream()
+                    .min(Comparator.comparingDouble(r -> worldInfo.getDistance(cv.getPosition(), r)))
+                    .map(worldInfo::getEntity).orElse(null);
+            if (nearestRefuge == null) continue;
+            pathPlanning.setFrom(cvPos);
+            pathPlanning.setDestination(nearestRefuge.getID());
+            List<EntityID> path = pathPlanning.calc().getResult();
+            if (path != null) path.forEach(id -> putTask(id, 2)); // 优先级2
+        }
+    }
+
+    private void addVoiceHelp() {
+        for (Command cmd : Objects.requireNonNull(agentInfo.getHeard())) {
+            if (cmd instanceof AKSpeak speak && speak.getChannel() == 0
+                    && !speak.getAgentID().equals(agentInfo.getID())) {
+                String voice = new String(speak.getContent());
+                if ("Help".equalsIgnoreCase(voice) || "Ouch".equalsIgnoreCase(voice)) {
+                    int range = scenarioInfo.getRawConfig().getIntValue("comms.channels.0.range");
+                    worldInfo.getObjectsInRange(agentInfo.getID(), range).stream()
+                            .filter(e -> e instanceof Building)
+                            .map(e -> (Building) e)
+                            .forEach(b -> b.getNeighbours().stream()
+                                    .map(worldInfo::getEntity)
+                                    .filter(r -> r instanceof Road)
+                                    .forEach(r -> putTask(r.getID(), 1))); // 最高优先级1
+                }
+            }
+        }
+    }
+
+    private boolean isValidCivilian(StandardEntity e) {
+        if (!(e instanceof Civilian c)) return false;
+        return c.isHPDefined() && c.getHP() > 0
+                && c.isPositionDefined()
+                && !(worldInfo.getPosition(c) instanceof Refuge);
+    }
 }

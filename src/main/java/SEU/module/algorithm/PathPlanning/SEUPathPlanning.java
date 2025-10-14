@@ -46,13 +46,13 @@ public class SEUPathPlanning extends PathPlanning {
     this.highways = mm.getModule("SEU.Algorithm.SEUPathPlanning.Highways");
     this.registerModule(this.highways);
 
-    // this.failedMove =
-    //     mm.getModule("AIT.Algorithm.PassablePathPlanning.FailedMove");
-    // this.registerModule(this.failedMove);
+    this.failedMove =
+        mm.getModule("SEU.Algorithm.SEUPathPlanning.FailedMove");
+    this.registerModule(this.failedMove);
 
-    // this.stuckedHumans =
-    //     mm.getModule("AIT.Algorithm.PassablePathPlanning.StuckHumans");
-    // this.registerModule(this.stuckedHumans);
+    this.stuckedHumans =
+        mm.getModule("SEU.Algorithm.SEUPathPlanning.StuckHumans");
+    this.registerModule(this.stuckedHumans);
   }
 
   @Override
