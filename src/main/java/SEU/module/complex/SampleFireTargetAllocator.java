@@ -48,6 +48,7 @@ public class SampleFireTargetAllocator extends FireTargetAllocator {
     public SampleFireTargetAllocator(AgentInfo ai, WorldInfo wi, ScenarioInfo si,
                                    ModuleManager mm, DevelopData dd) {
         super(ai, wi, si, mm, dd);
+        System.out.println("SampleFireTargetAllocator 被实例化了");
         this.adapter = new SEU.module.complex.dcop.BufferedCommunicationAdapter();
 
         // 初始化邻居聚类模块
@@ -63,43 +64,49 @@ public class SampleFireTargetAllocator extends FireTargetAllocator {
     }
 
     @Override
-    public FireTargetAllocator calc() {
-        this.result.clear();
-        if (this.agents.isEmpty()) {
-            this.initializeAgents();
-        }
-        if (!this.have2allocate()) {
-            return this;
-        }
-
-        this.initializeTasks();
-        this.initializeFactorGraph();
-        for (int i = 0; i < ITERATIONS; ++i) {
-            this.nodes.values().stream().forEach(Factor::run);
-            this.adapter.execute(this.nodes);
-        }
-
-        for (EntityID agent : this.agents) {
-            final Factor<EntityID> node = this.nodes.get(agent);
-            EntityID task = selectTask((ProxyFactor<EntityID>) node);
-            if (task.equals(SEARCHING_TASK)) {
-                task = null;
-            }
-            this.result.put(agent, task);
-        }
-
-        // 调试输出
-        int n = 0;
-        for (EntityID id : this.agents) {
-            if (this.result.get(id) != null) {
-                ++n;
-            }
-        }
-        DebugLogger.log("消防分配器", "本次分配完成，实际分配任务智能体数 = " + n + " / " + agents.size());
-        System.out.println("FIRE ALLOCATOR -> " + n);
-
+public FireTargetAllocator calc() {
+    DebugLogger.log("消防分配器", "calc方法开始执行");
+    this.result.clear();
+    if (this.agents.isEmpty()) {
+        DebugLogger.log("消防分配器", "初始化智能体集合");
+        this.initializeAgents();
+    }
+    if (!this.have2allocate()) {
+        DebugLogger.log("消防分配器", "跳过分配，条件不满足");
         return this;
     }
+
+    DebugLogger.log("消防分配器", "开始任务分配计算");
+    this.initializeTasks();
+    this.initializeFactorGraph();
+    
+    DebugLogger.log("消防分配器", "开始因子图迭代计算，迭代次数=" + ITERATIONS);
+    for (int i = 0; i < ITERATIONS; ++i) {
+        this.nodes.values().stream().forEach(Factor::run);
+        this.adapter.execute(this.nodes);
+    }
+
+    for (EntityID agent : this.agents) {
+        final Factor<EntityID> node = this.nodes.get(agent);
+        EntityID task = selectTask((ProxyFactor<EntityID>) node);
+        if (task.equals(SEARCHING_TASK)) {
+            task = null;
+        }
+        this.result.put(agent, task);
+    }
+
+    // 调试信息输出
+    int n = 0;
+    for (EntityID id : this.agents) {
+        if (this.result.get(id) != null) {
+            ++n;
+        }
+    }
+    DebugLogger.log("消防分配器", "本次分配完成，实际分配任务智能体数 = " + n + " / " + agents.size());
+    DebugLogger.logAllocationResult("消防分配器", this.result, this.agents, this.tasks);
+
+    return this;
+}
 
     @Override
     public FireTargetAllocator updateInfo(MessageManager mm) {
@@ -157,27 +164,34 @@ public class SampleFireTargetAllocator extends FireTargetAllocator {
         return this;
     }
 
-    private boolean have2allocate() {
-        if (!this.allCentersExists()) {
-            return false;
-        }
-        final int nAgents = this.agents.size();
-        if (this.received.size() != nAgents) {
-            return false;
-        }
-
-        final int lowest = this.worldInfo.getEntityIDsOfType(URL)
-            .stream()
-            .mapToInt(EntityID::getValue)
-            .min().orElse(-1);
-
-        final int me = this.agentInfo.getID().getValue();
-        final int time = this.agentInfo.getTime();
-        final int ignored = this.scenarioInfo.getKernelAgentsIgnoreuntil();
-        System.out.println("【" + URL + "】me=" + me + ", lowest=" + lowest + ", willRun=" + (me == lowest));
-        return time >= ignored && me == lowest;
-        // return true;
+   private boolean have2allocate() {
+    if (!this.allCentersExists()) {
+        DebugLogger.log("消防分配器", "分配条件不满足：不是所有中心都存在");
+        return false;
     }
+    // final int nAgents = this.agents.size();
+    // if (this.received.size() != nAgents) {
+    //     DebugLogger.log("消防分配器", 
+    //         "分配条件不满足：接收消息数(" + this.received.size() + ") ≠ 智能体数(" + nAgents + ")");
+    //     return false;
+    // }
+
+    final int lowest = this.worldInfo.getEntityIDsOfType(URL)
+        .stream()
+        .mapToInt(EntityID::getValue)
+        .min().orElse(-1);
+
+    final int me = this.agentInfo.getID().getValue();
+    final int time = this.agentInfo.getTime();
+    final int ignored = this.scenarioInfo.getKernelAgentsIgnoreuntil();
+    
+    boolean result = time >= ignored && me == lowest;
+    DebugLogger.log("消防分配器", 
+        "分配条件检查：时间=" + time + ", 忽略时间=" + ignored + 
+        ", 最低ID=" + lowest + ", 我的ID=" + me + ", 结果=" + result);
+    
+    return result;
+}
 
     private boolean allCentersExists() {
         final int fss = this.scenarioInfo.getScenarioAgentsFs();

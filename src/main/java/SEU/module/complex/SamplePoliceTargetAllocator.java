@@ -49,6 +49,7 @@ public class SamplePoliceTargetAllocator extends PoliceTargetAllocator {
     public SamplePoliceTargetAllocator(AgentInfo ai, WorldInfo wi, ScenarioInfo si,
                                      ModuleManager mm, DevelopData dd) {
         super(ai, wi, si, mm, dd);
+        System.out.println("SamplePoliceTargetAllocator 被实例化了");
         this.adapter = new SEU.module.complex.dcop.BufferedCommunicationAdapter();
     }
 
@@ -59,11 +60,14 @@ public class SamplePoliceTargetAllocator extends PoliceTargetAllocator {
 
     @Override
     public PoliceTargetAllocator calc() {
+        DebugLogger.log("警察分配器", "calc方法开始执行");
         this.result.clear();
         if (this.agents.isEmpty()) {
+            DebugLogger.log("警察分配器", "初始化智能体集合");
             this.initializeAgents();
         }
         if (!this.have2allocate()) {
+            DebugLogger.log("警察分配器", "跳过分配，条件不满足");
             return this;
         }
 
@@ -90,8 +94,8 @@ public class SamplePoliceTargetAllocator extends PoliceTargetAllocator {
                 ++n;
             }
         }
-        DebugLogger.log("警察分配器", "本次分配完成，实际分配任务智能体数 = " + n + " / " + agents.size());
-        System.out.println("POLICE ALLOCATOR -> " + n);
+DebugLogger.log("警察分配器", "本次分配完成，实际分配任务智能体数 = " + n + " / " + agents.size());
+DebugLogger.logAllocationResult("警察分配器", this.result, this.agents, this.tasks);
 
         return this;
     }
@@ -219,12 +223,15 @@ public class SamplePoliceTargetAllocator extends PoliceTargetAllocator {
 
     private boolean have2allocate() {
         if (!this.allCentersExists()) {
+            DebugLogger.log("警察分配器", "分配条件不满足：不是所有中心都存在");
             return false;
         }
-        final int nAgents = this.agents.size();
-        if (this.received.size() != nAgents) {
-            return false;
-        }
+        // final int nAgents = this.agents.size();
+        // if (this.received.size() != nAgents) {
+        //     DebugLogger.log("警察分配器", 
+        //     "分配条件不满足：接收消息数(" + this.received.size() + ") ≠ 智能体数(" + nAgents + ")");
+        //     return false;
+        // }
 
         final int lowest = this.worldInfo.getEntityIDsOfType(URL)
             .stream()
@@ -235,6 +242,10 @@ public class SamplePoliceTargetAllocator extends PoliceTargetAllocator {
         final int time = this.agentInfo.getTime();
         final int ignored = this.scenarioInfo.getKernelAgentsIgnoreuntil();
         System.out.println("【" + URL + "】me=" + me + ", lowest=" + lowest + ", willRun=" + (me == lowest));
+        boolean result = time >= ignored && me == lowest;
+    DebugLogger.log("警察分配器", 
+        "分配条件检查：时间=" + time + ", 忽略时间=" + ignored + 
+        ", 最低ID=" + lowest + ", 我的ID=" + me + ", 结果=" + result);
         return time >= ignored && me == lowest;
         // return true;
     }
