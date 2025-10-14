@@ -199,7 +199,7 @@ public class TestRoadDetector extends RoadDetector {
         /* 4. 高速道路（若配置了 highways 模块）优先级 5 */
         // 这里用 StaticClustering 示例，若未配置则跳过
         try {
-            StaticClustering highways = (StaticClustering) moduleManager.getModule("SEU.RoadDetector.Highways");
+            StaticClustering highways = (StaticClustering) moduleManager.getModule("SEU.TestRoadDetector.Highways");
             highways.getClusterEntityIDs(0).forEach(id -> putTask(id, 5));
         } catch (Exception ignore) {/* 没配就跳过 */}
 
