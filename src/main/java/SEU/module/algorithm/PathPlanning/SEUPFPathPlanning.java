@@ -235,9 +235,15 @@ public class SEUPFPathPlanning extends PathPlanning {
   }
 
   private Collection<EntityID> getNeighbors(EntityID id) {
-    final Area area = (Area) this.worldInfo.getEntity(id);
+    StandardEntity entity = this.worldInfo.getEntity(id);
+    if (!(entity instanceof Area)) {
+        // 如果不是 Area，返回空列表，避免崩溃
+        System.out.println("【警告】getNeighbors 收到非 Area 实体: " + entity.getClass().getSimpleName() + " ID=" + id);
+        return Collections.emptyList();
+    }
+    Area area = (Area) entity;
     return area.getNeighbours();
-  }
+}
 
   private double computeDistance(EntityID id, EntityID ancestor) {
     return this.worldInfo.getDistance(id, ancestor);
