@@ -12,9 +12,9 @@ import static rescuecore2.standard.entities.StandardEntityURN.*;
 
 import rescuecore2.worldmodel.EntityID;
 import java.util.*;
+// 显式导入Collectors
 import java.util.stream.*;
 
-import static java.util.stream.Collectors.*;
 import static java.util.Comparator.*;
 
 /**
@@ -37,6 +37,9 @@ public class SEUHighways extends StaticClustering {
   private static final String MODULE_NAME =
       "SEU.module.algorithm.SEUHighways";
   private static final String PD_HIGHWAYS = MODULE_NAME + ".highways";
+
+  // Debug文件路径
+  private static final String DEBUG_FILE_PATH = "./logs/highways_debug.txt";
 
   public SEUHighways(
       AgentInfo ai, WorldInfo wi, ScenarioInfo si,
@@ -76,6 +79,10 @@ public class SEUHighways extends StaticClustering {
 
     // 将高速公路信息保存到预计算数据中
     pd.setEntityIDList(PD_HIGHWAYS, new ArrayList<>(this.highways));
+    
+    // 输出Debug信息
+    this.debugHighways();
+    
     return this;
   }
 
@@ -141,7 +148,7 @@ public class SEUHighways extends StaticClustering {
 
     Stream<StandardEntity> entities =
         ids.stream().map(this.worldInfo::getEntity);
-    return entities.collect(toList());
+    return entities.collect(Collectors.toList());
   }
 
   /**
@@ -221,5 +228,86 @@ public class SEUHighways extends StaticClustering {
     }
 
     return ret;
+  }
+
+  /**
+   * Debug方法：输出高速公路信息到文件
+   */
+  private void debugHighways() {
+    try {
+      // 创建logs目录（如果不存在）
+      java.io.File logsDir = new java.io.File("./logs");
+      if (!logsDir.exists()) {
+        logsDir.mkdirs();
+      }
+      
+      java.io.PrintWriter writer = new java.io.PrintWriter(DEBUG_FILE_PATH, "UTF-8");
+      
+      writer.println("=== SEUHighways Debug 信息 ===");
+      writer.println("生成时间: " + new java.util.Date());
+      writer.println("高速公路总数: " + this.highways.size());
+      writer.println();
+      
+      writer.println("采样点数量: " + SAMPLE_NUMBER);
+      
+      // 使用传统循环避免stream类型推断问题
+      Map<String, Long> typeCounts = new HashMap<>();
+      for (EntityID id : this.highways) {
+          StandardEntity entity = this.worldInfo.getEntity(id);
+          String type = entity != null ? String.valueOf(entity.getURN()) : "UNKNOWN";
+          typeCounts.put(type, typeCounts.getOrDefault(type, 0L) + 1);
+      }
+      
+      writer.println("高速公路实体类型分布:");
+      for (Map.Entry<String, Long> entry : typeCounts.entrySet()) {
+          writer.println("  " + entry.getKey() + ": " + entry.getValue() + " 个");
+      }
+      writer.println();
+      
+      // 详细列出所有高速公路实体
+      writer.println("详细高速公路实体列表:");
+      List<String> entityInfoList = new ArrayList<>();
+      for (EntityID id : this.highways) {
+          StandardEntity entity = this.worldInfo.getEntity(id);
+          String info;
+          if (entity instanceof Area) {
+              Area area = (Area) entity;
+              info = String.format("ID: %d, 类型: %s, 坐标: (%d, %d)", 
+                  id.getValue(), entity.getURN(), area.getX(), area.getY());
+          } else {
+              info = String.format("ID: %d, 类型: %s", 
+                  id.getValue(), entity != null ? entity.getURN() : "UNKNOWN");
+          }
+          entityInfoList.add(info);
+      }
+      
+      Collections.sort(entityInfoList);
+      for (String info : entityInfoList) {
+          writer.println(info);
+      }
+      
+      writer.close();
+      
+      System.out.println("高速公路Debug信息已输出到: " + DEBUG_FILE_PATH);
+      System.out.println("高速公路总数: " + this.highways.size());
+      
+    } catch (Exception e) {
+      System.err.println("写入Debug文件时出错: " + e.getMessage());
+      // 如果文件写入失败，在控制台输出基本信息
+      System.out.println("高速公路总数: " + this.highways.size());
+      
+      // 使用传统方式构建ID列表字符串
+      List<Integer> idList = new ArrayList<>();
+      for (EntityID id : this.highways) {
+          idList.add(id.getValue());
+      }
+      Collections.sort(idList);
+      StringBuilder sb = new StringBuilder();
+      for (int i = 0; i < idList.size(); i++) {
+          if (i > 0) sb.append(", ");
+          sb.append(idList.get(i));
+      }
+      System.out.println("高速公路实体ID列表: " + sb.toString());
+    }
   }
 }

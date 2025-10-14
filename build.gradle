@@ -34,8 +34,11 @@ dependencies {
   implementation 'com.github.roborescue:adf-core-java:master-SNAPSHOT'
   implementation 'log4j:log4j:1.2.17'
   implementation 'org.openforis.collect:collect:4.0.75'
-  implementation 'org.locationtech.jts:jts-core:1.18.2'
-  implementation 'org.locationtech.jts.io:jts-io-common:1.18.2'
+  // implementation 'org.locationtech.jts:jts-core:1.18.2'
+  implementation 'org.locationtech.jts:jts-core:1.19.0'
+  implementation 'org.locationtech.jts.io:jts-io-common:1.19.0' // WKT/WKB
+    implementation 'org.locationtech.jts:jts-io:1.19.0' // 扩展 I/O
+  // implementation 'org.locationtech.jts.io:jts-io-common:1.18.2'
   implementation 'com.google:google:5'
 //    implementation 'com.google.gms.google-services:com.google.gms.google-services.gradle.plugin:4.3.15'
   implementation 'com.google.common.inject:inject-common:1.0'
