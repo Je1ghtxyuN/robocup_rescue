@@ -22,6 +22,8 @@ import es.csic.iiia.bms.factors.CardinalityFactor.CardinalityFunction;
 import java.util.*;
 import java.util.stream.*;
 
+import SEU.module.complex.dcop.DebugLogger;
+
 import static java.util.stream.Collectors.*;
 
 public class SamplePoliceTargetAllocator extends PoliceTargetAllocator {
@@ -88,6 +90,7 @@ public class SamplePoliceTargetAllocator extends PoliceTargetAllocator {
                 ++n;
             }
         }
+        DebugLogger.log("警察分配器", "本次分配完成，实际分配任务智能体数 = " + n + " / " + agents.size());
         System.out.println("POLICE ALLOCATOR -> " + n);
 
         return this;
@@ -231,7 +234,9 @@ public class SamplePoliceTargetAllocator extends PoliceTargetAllocator {
         final int me = this.agentInfo.getID().getValue();
         final int time = this.agentInfo.getTime();
         final int ignored = this.scenarioInfo.getKernelAgentsIgnoreuntil();
+        System.out.println("【" + URL + "】me=" + me + ", lowest=" + lowest + ", willRun=" + (me == lowest));
         return time >= ignored && me == lowest;
+        // return true;
     }
 
     private boolean allCentersExists() {
@@ -261,6 +266,7 @@ public class SamplePoliceTargetAllocator extends PoliceTargetAllocator {
 
         this.tasks.addAll(this.requested);
         this.tasks.removeAll(this.ignored);
+        DebugLogger.log("警察分配器", "任务初始化完成，待清理道路/入口共 " + tasks.size() + " 个（含搜索任务）");
     }
 
     private Stream<EntityID> extractTasks(EntityID position) {
@@ -341,6 +347,7 @@ public class SamplePoliceTargetAllocator extends PoliceTargetAllocator {
                 final double penalty = this.computePenalty(vnodeid, fnodeid);
                 vnode.setPotential(fnodeid, penalty);
             }
+            DebugLogger.log("警察分配器", "变量节点与因子节点连接完成，每个警察最多连接 3 个任务");
         }
     }
 

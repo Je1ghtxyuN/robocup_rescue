@@ -85,6 +85,7 @@ public class SampleAmbulanceTargetAllocator extends AmbulanceTargetAllocator {
                 ++n;
             }
         }
+        DebugLogger.log("救护车分配器", "本次分配完成，实际分配任务智能体数 = " + n + " / " + agents.size());
         System.out.println("AMBULANCE ALLOCATOR -> " + n);
 
         return this;
@@ -151,7 +152,9 @@ public class SampleAmbulanceTargetAllocator extends AmbulanceTargetAllocator {
         final int me = this.agentInfo.getID().getValue();
         final int time = this.agentInfo.getTime();
         final int ignored = this.scenarioInfo.getKernelAgentsIgnoreuntil();
+        System.out.println("【" + URL + "】me=" + me + ", lowest=" + lowest + ", willRun=" + (me == lowest));
         return time >= ignored && me == lowest;
+        // return true;
     }
 
     private boolean allCentersExists() {
@@ -181,6 +184,8 @@ public class SampleAmbulanceTargetAllocator extends AmbulanceTargetAllocator {
 
         this.tasks.removeAll(this.ignored);
         this.tasks.add(SEARCHING_TASK);
+
+        DebugLogger.log("救护车分配器", "任务初始化完成，有效任务共 " + tasks.size() + " 个（含搜索任务）");
     }
 
     private void initializeFactorGraph() {
@@ -227,6 +232,7 @@ public class SampleAmbulanceTargetAllocator extends AmbulanceTargetAllocator {
                 final EntityID fnodeid = closer.get(i);
                 connectSingleNode(vnodeid, fnodeid);
             }
+            DebugLogger.log("救护车分配器", "变量节点与因子节点连接完成，每个智能体最多连接 4 个任务");
         }
     }
 

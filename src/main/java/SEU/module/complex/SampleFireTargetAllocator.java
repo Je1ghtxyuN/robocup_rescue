@@ -22,6 +22,8 @@ import es.csic.iiia.bms.factors.CardinalityFactor.CardinalityFunction;
 import java.util.*;
 import java.util.stream.*;
 
+import SEU.module.complex.dcop.DebugLogger;
+
 import static java.util.stream.Collectors.*;
 
 public class SampleFireTargetAllocator extends FireTargetAllocator {
@@ -93,6 +95,7 @@ public class SampleFireTargetAllocator extends FireTargetAllocator {
                 ++n;
             }
         }
+        DebugLogger.log("消防分配器", "本次分配完成，实际分配任务智能体数 = " + n + " / " + agents.size());
         System.out.println("FIRE ALLOCATOR -> " + n);
 
         return this;
@@ -171,7 +174,9 @@ public class SampleFireTargetAllocator extends FireTargetAllocator {
         final int me = this.agentInfo.getID().getValue();
         final int time = this.agentInfo.getTime();
         final int ignored = this.scenarioInfo.getKernelAgentsIgnoreuntil();
+        System.out.println("【" + URL + "】me=" + me + ", lowest=" + lowest + ", willRun=" + (me == lowest));
         return time >= ignored && me == lowest;
+        // return true;
     }
 
     private boolean allCentersExists() {
@@ -201,6 +206,7 @@ public class SampleFireTargetAllocator extends FireTargetAllocator {
 
         this.tasks.removeAll(this.ignored);
         this.tasks.add(SEARCHING_TASK);
+        DebugLogger.log("消防分配器", "任务初始化完成，着火建筑任务数 = " + (tasks.size()-1) + "，含搜索任务");
     }
 
     private boolean isCornerInFireCluster(Building building) {
@@ -272,6 +278,7 @@ public class SampleFireTargetAllocator extends FireTargetAllocator {
                 vnode.setPotential(fnodeid, penalty);
             }
         }
+        DebugLogger.log("消防分配器", "变量节点与因子节点连接完成，全连接模式");
     }
 
     private static EntityID selectTask(ProxyFactor<EntityID> proxy) {
