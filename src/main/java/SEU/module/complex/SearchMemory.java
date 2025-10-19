@@ -1,4 +1,5 @@
 package SEU.module.complex;
+import SEU.module.complex.dcop.DebugLogger;
 import adf.core.agent.communication.MessageManager;
 import adf.core.agent.communication.standard.bundle.StandardMessagePriority;
 import adf.core.agent.communication.standard.bundle.centralized.CommandAmbulance;
@@ -11,6 +12,7 @@ import adf.core.agent.info.WorldInfo;
 import adf.core.component.communication.CommunicationMessage;
 import adf.core.component.module.algorithm.Clustering;
 import adf.core.component.module.algorithm.PathPlanning;
+import org.apache.log4j.LogMF;
 import rescuecore2.messages.Command;
 import rescuecore2.standard.entities.*;
 import rescuecore2.standard.messages.AKSpeak;
@@ -216,6 +218,8 @@ public class SearchMemory {
                         messageManager.addMessage(new CommandAmbulance(true, StandardMessagePriority.HIGH, null, civilian.getID(), CommandAmbulance.ACTION_RESCUE));
                         // 同时通过非无线电方式发送
                         messageManager.addMessage(new CommandAmbulance(false, StandardMessagePriority.HIGH, null, civilian.getID(), CommandAmbulance.ACTION_RESCUE));
+
+                        DebugLogger.log("FireBrigade","-----已请求救护车支援----- 时间: " + this.agentInfo.getTime() + " 目标平民ID: " + civilian.getID().getValue() + " 位置: " + civilian.getPosition().getValue());
                     }
                 }
 
@@ -268,8 +272,8 @@ public class SearchMemory {
             return false;
         if (!target.isPositionDefined())
             return false;
-        //if (!target.isDamageDefined() || target.getDamage() == 0)
-         //   return false;
+        if (!target.isDamageDefined() || target.getDamage() == 0)
+           return false;
         if (!target.isBuriednessDefined())
             return false;
         //抛弃血量太低，短时间内就会死掉的人
