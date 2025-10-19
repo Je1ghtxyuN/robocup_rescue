@@ -277,37 +277,42 @@ public class DefaultExtActionFireRescue extends ExtAction {
     return null;
   }
 
-  private Action getStuckAction(){
+    private Action getStuckAction(){
+        // 检查停滞时间是否达到阈值
+        if(stopTime < stopTimeThreshold){
+            return null;  // 未达到停滞阈值，不进行特殊处理
+        }
+        stopTime = 0;  // 达到停滞阈值，重置停滞计时器
 
-    if(stopTime<stopTimeThreshold){
-      return null;
-    }
-    stopTime = 0;
-
-
+        // 原计划实现的随机移动功能被注释掉
 //    return randomMove();
-    return null;
-
-  }
-
-  private void refreshInfo(){
-
-    if(getDistance(this.lastPositionX,this.lastPositionY,this.agentInfo.getX(),this.agentInfo.getY())<1000){
-      stopTime ++;
+        return null;  // 当前版本始终返回null，表示不执行任何特殊动作
     }
 
-    if(getDistance(this.lastPositionX,this.lastPositionY,this.agentInfo.getX(),this.agentInfo.getY())>3000){
-      stopTime=0;
+    /**
+     * 刷新消防员的状态信息，主要负责计算停滞时间和更新位置记录
+     * 该方法用于检测消防员是否处于停滞状态，是实现障碍物规避和路径重新规划的基础
+     */
+    private void refreshInfo() {
+        // 计算与上次记录位置的距离，判断是否处于停滞状态
+        // 如果移动距离小于1000（极小距离），则认为处于停滞状态，增加停滞时间计数
+        if(getDistance(this.lastPositionX, this.lastPositionY, this.agentInfo.getX(), this.agentInfo.getY()) < 1000) {
+            stopTime++;
+        }
+        // 如果移动距离大于3000（有效移动距离），则认为已经离开停滞状态，重置停滞时间计数
+        if(getDistance(this.lastPositionX, this.lastPositionY, this.agentInfo.getX(), this.agentInfo.getY()) > 3000) {
+            stopTime = 0;
+        }
+        // 如果当前执行的动作是救援动作(ActionRescue)，无论是否移动，都重置停滞时间
+        // 这确保了救援过程中的短暂停留不会被误判为需要重新规划路径的停滞状态
+        if(this.result != null && this.result.getClass() == ActionRescue.class) {
+            stopTime = 0;
+        }
+
+        // 更新位置记录，将当前位置保存为下次计算的基准位置
+        this.lastPositionX = this.agentInfo.getX();
+        this.lastPositionY = this.agentInfo.getY();
     }
-
-    if(this.result!=null&&this.result.getClass()==ActionRescue.class){
-      stopTime = 0;
-    }
-
-    this.lastPositionX = this.agentInfo.getX();
-    this.lastPositionY = this.agentInfo.getY();
-
-  }
 
   private Edge getNextEdge(EntityID positionID,Blockade blockade){
 

@@ -639,27 +639,44 @@ public class SEUWorldInfo extends AbstractModule {
     /*
         发送看到的信息
     */
+    /**
+     * 发送看到的信息
+     * 该方法用于遍历世界中所有发生变化的实体，并将需要关注的平民信息发送给消息管理器
+     * @param messageManager 消息管理器，用于分发各类实体信息
+     */
     private void sendInformationMessage(MessageManager messageManager) {
+        // 遍历所有发生变化的实体ID
         for (EntityID id : this.worldInfo.getChanged().getChangedEntities()) {
+            // 频率控制机制：避免在短时间内重复发送同一实体的信息
+            // 通过比较当前时间与上次接收时间加避免时间间隔来实现
             if (this.receivedTime.getOrDefault(id, -this.sendindAvoidTimeReceive) + this.sendindAvoidTimeReceive
                     > this.agentInfo.getTime()) continue;
-            StandardEntity e = this.worldInfo.getEntity(id);
-/*            if (e instanceof Building) {
-                Building b = (Building) e;
-                if (b.isOnFire()) {
-                    messageManager.addMessage(new MessageBuilding(true, StandardMessagePriority.HIGH, b));
-                } else {
-                    messageManager.addMessage(new MessageBuilding(true, StandardMessagePriority.NORMAL, b));
-                }
 
+            // 获取实体对象
+            StandardEntity e = this.worldInfo.getEntity(id);
+
+        /* 注释掉的建筑物相关处理逻辑
+        if (e instanceof Building) {
+            Building b = (Building) e;
+            if (b.isOnFire()) {
+                messageManager.addMessage(new MessageBuilding(true, StandardMessagePriority.HIGH, b));
+            } else {
+                messageManager.addMessage(new MessageBuilding(true, StandardMessagePriority.NORMAL, b));
             }
- */
+        }
+        */
+
+            // 处理平民类型实体
             if (e instanceof Civilian) {
                 Civilian c = (Civilian) e;
+                // 情况1：平民受到伤害（伤害值已定义且大于0）
                 if (c.isDamageDefined() && c.getDamage() > 0) {
+                    // 发送高优先级的平民信息
                     messageManager.addMessage(new MessageCivilian(true, StandardMessagePriority.HIGH, c));
                 }
+                // 情况2：平民被掩埋（掩埋度已定义且大于0）
                 else if (c.isBuriednessDefined() && c.getBuriedness() > 0) {
+                    // 发送高优先级的平民信息
                     messageManager.addMessage(new MessageCivilian(true, StandardMessagePriority.HIGH, c));
                 }
             }

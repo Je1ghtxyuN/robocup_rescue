@@ -1,6 +1,7 @@
 package SEU.module.complex;
 import adf.core.agent.communication.MessageManager;
 import adf.core.agent.communication.standard.bundle.StandardMessagePriority;
+import adf.core.agent.communication.standard.bundle.centralized.CommandAmbulance;
 import adf.core.agent.communication.standard.bundle.centralized.CommandPolice;
 import adf.core.agent.communication.standard.bundle.information.MessageBuilding;
 import adf.core.agent.communication.standard.bundle.information.MessageCivilian;
@@ -140,19 +141,84 @@ public class SearchMemory {
         }
     }
 
+    /**
+     * 更新并发送消息到消息管理器
+     * 该方法根据当前世界状态发送两种类型的消息：
+     * 1. 当无法到达的建筑物过多时，请求警察清理道路
+     * 2. 当发现有效平民在智能体当前位置时，发送平民信息
+     * @param messageManager 消息管理器，用于分发各类消息
+     */
     private void updateMessage(MessageManager messageManager) {
+        // 检查无法到达的建筑物数量，如果超过2个，则请求警察清理道路
         if (this.unreachableBuildings.size() > 2) {
+            // 通过无线电发送高优先级的警察清理命令
             messageManager.addMessage(new CommandPolice(true, StandardMessagePriority.HIGH, null, this.agentInfo.getPosition(), CommandPolice.ACTION_CLEAR));
+            // 不通过无线电发送高优先级的警察清理命令
             messageManager.addMessage(new CommandPolice(false, StandardMessagePriority.HIGH, null, this.agentInfo.getPosition(), CommandPolice.ACTION_CLEAR));
         }
+
+        // 遍历世界中所有平民类型的实体
         for (EntityID e : this.worldInfo.getEntityIDsOfType(CIVILIAN)) {
+            // 获取实体对象
             StandardEntity se = this.worldInfo.getEntity(e);
+
+            // 检查是否为有效的人类实体
             if (isValidHuman(se)) {
+                // 将实体转换为平民类型
                 Civilian civilian = (Civilian) se;
+
+                // 检查条件：
+                // 1. 平民位置与智能体当前位置相同
+                // 2. 排除救护车且平民未被掩埋的情况（因为这种情况不需要额外处理）
                 if (civilian.getPosition().equals(this.agentInfo.getPosition()) && !(this.agentInfo.me() instanceof AmbulanceTeam && civilian.getBuriedness() == 0)) {
+                    // 通过无线电发送高优先级的平民信息
                     messageManager.addMessage(new MessageCivilian(true, StandardMessagePriority.HIGH, civilian));
+                    // 不通过无线电发送高优先级的平民信息
+                    // 参数说明：
+                    // - false: 不通过无线电发送消息
+                    // - StandardMessagePriority.HIGH: 设置消息优先级为高
+                    // - civilian: 包含平民详细信息的对象
                     messageManager.addMessage(new MessageCivilian(false, StandardMessagePriority.HIGH, civilian));
                 }
+
+                // 新增逻辑：当智能体是消防员，且同一位置有平民，且视线内和同一位置都没有救护车时，请求救护车
+                if (this.agentInfo.me() instanceof FireBrigade && civilian.getPosition().equals(this.agentInfo.getPosition())) {
+                    boolean hasAmbulanceInSight = false;
+                    boolean hasAmbulanceAtSamePosition = false;
+
+                    /*// 检查视线内是否有救护车
+                    for (StandardEntity entity : this.worldInfo.getEntitiesOfType(AmbulanceTeam.class)) {
+                        if (this.worldInfo.isVisible(entity.getID())) {
+                            hasAmbulanceInSight = true;
+                            break;
+                        }
+                    }
+
+                    // 检查同一位置是否有救护车
+                    for (StandardEntity entity : this.worldInfo.getEntitiesOfType(AmbulanceTeam.class)) {
+                        if (entity.getPosition().equals(this.agentInfo.getPosition())) {
+                            hasAmbulanceAtSamePosition = true;
+                            break;
+                        }
+                    }
+
+ */
+
+                    // 如果视线内和同一位置都没有救护车并且平民未被掩埋还受伤，则请求救护车支援
+                    if (!hasAmbulanceInSight && !hasAmbulanceAtSamePosition&&civilian.getBuriedness() == 0&&civilian.getDamage() != 0) {
+                        // 发送请求救护车的命令
+                        // 参数说明：
+                        // - true: 通过无线电发送
+                        // - StandardMessagePriority.HIGH: 高优先级
+                        // - null: 广播给所有救护车
+                        // - civilian.getID(): 目标平民ID
+                        // - ACTION_RESCUE: 执行救援动作
+                        messageManager.addMessage(new CommandAmbulance(true, StandardMessagePriority.HIGH, null, civilian.getID(), CommandAmbulance.ACTION_RESCUE));
+                        // 同时通过非无线电方式发送
+                        messageManager.addMessage(new CommandAmbulance(false, StandardMessagePriority.HIGH, null, civilian.getID(), CommandAmbulance.ACTION_RESCUE));
+                    }
+                }
+
             }
         }
     }
@@ -202,8 +268,8 @@ public class SearchMemory {
             return false;
         if (!target.isPositionDefined())
             return false;
-        if (!target.isDamageDefined() || target.getDamage() == 0)
-            return false;
+        //if (!target.isDamageDefined() || target.getDamage() == 0)
+         //   return false;
         if (!target.isBuriednessDefined())
             return false;
         //抛弃血量太低，短时间内就会死掉的人
