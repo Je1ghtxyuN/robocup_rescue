@@ -339,7 +339,16 @@ public class TestRoadDetector extends RoadDetector {
     return null;
 }
 
-
+private List<Human> filterRescueTargets(Collection<? extends StandardEntity> list) {
+    List<Human> rescueTargets = new ArrayList<>();
+    for (StandardEntity next : list) {
+        if (!(next instanceof Human)) continue;
+        Human h = (Human) next;
+        if (!isValidHuman(h)) continue;
+        rescueTargets.add(h);
+    }
+    return rescueTargets;
+}
 
 	@Override
 	public EntityID getTarget()
@@ -357,6 +366,42 @@ public class TestRoadDetector extends RoadDetector {
             logger.debug("警察已完成初始避难所清理任务: " + initialRefugeTarget);
         }
     }
+
+	// 获取所有需要救援的人类实体（市民、警察、消防员）
+Collection<StandardEntity> allHumans = new ArrayList<>();
+allHumans.addAll(this.worldInfo.getEntitiesOfType(CIVILIAN));
+allHumans.addAll(this.worldInfo.getEntitiesOfType(POLICE_FORCE));
+allHumans.addAll(this.worldInfo.getEntitiesOfType(FIRE_BRIGADE));
+
+List<Human> rescueTargets = filterRescueTargets(allHumans);
+
+// 为每个需要救援的目标计算路径并加入优先级道路
+for (Human human : rescueTargets) {
+    EntityID humanPositionID = human.getPosition();
+    StandardEntity minDistanceRefuge = null;
+    int minDistance = 1000000;
+    for (StandardEntity e : this.worldInfo.getEntitiesOfType(REFUGE)) {
+        int currentDistance = this.worldInfo.getDistance(human, e);
+        if (currentDistance < minDistance) {
+            minDistanceRefuge = e;
+            minDistance = currentDistance;
+        }
+    }
+    Collection<EntityID> refugeToGo = new ArrayList<>();
+    if (minDistanceRefuge != null) {
+        refugeToGo.add(minDistanceRefuge.getID());
+    }
+    this.pathPlanning.setFrom(humanPositionID);
+    this.pathPlanning.setDestination(refugeToGo);
+    List<EntityID> path = this.pathPlanning.calc().getResult();
+    if (path != null) {
+        this.priorityRoads.addAll(path);
+        
+        // 记录日志
+        logger.debug("为" + human.getStandardURN() + " ID:" + human.getID() + 
+                   " 计算救援路径，长度:" + path.size());
+    }
+}
 
 		if(agentInfo.getTime()==1)
 		{
@@ -788,27 +833,39 @@ public class TestRoadDetector extends RoadDetector {
 	}
 
 	private boolean isValidHuman(StandardEntity entity) {
-		if (entity == null)
-			return false;
-		if (!(entity instanceof Human target))
-			return false;
+    if (entity == null) return false;
+    if (!(entity instanceof Human)) return false;
 
-		if (!target.isHPDefined() || target.getHP() == 0)
-			return false;
-		if (!target.isPositionDefined())
-			return false;
-		if (!target.isDamageDefined() || target.getDamage() == 0)
-			return false;
-		if (!target.isBuriednessDefined())
-			return false;
+    Human target = (Human) entity;
+    
+    // 排除救护队员
+    if (target.getStandardURN() == AMBULANCE_TEAM) {
+        return false;
+    }
+    
+    // 基础状态检查
+    if (!target.isHPDefined() || target.getHP() == 0) return false;
+    if (!target.isPositionDefined()) return false;
+    if (!target.isDamageDefined()) return false;
+    if (!target.isBuriednessDefined()) return false;
 
-		StandardEntity position = worldInfo.getPosition(target);
-		if (position == null)
-			return false;
+    // 受伤状态检查（需要救援的条件）
+    if (target.getHP() <= 0 || target.getDamage() <= 0) {
+        return false;
+    }
 
-		StandardEntityURN positionURN = position.getStandardURN();
-		return positionURN != REFUGE && positionURN != AMBULANCE_TEAM;
-	}
+    StandardEntity position = worldInfo.getPosition(target);
+    if (position == null) return false;
+
+    StandardEntityURN positionURN = position.getStandardURN();
+    // 排除已经在避难所或救护车上的目标
+    if (positionURN == StandardEntityURN.REFUGE || 
+        positionURN == StandardEntityURN.AMBULANCE_TEAM) {
+        return false;
+    }
+
+    return true;
+}
 
 
 
