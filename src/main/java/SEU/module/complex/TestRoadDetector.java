@@ -52,6 +52,10 @@ public class TestRoadDetector extends RoadDetector {
 
 	private boolean isLongTermSearch = false;
 
+	private static final int INITIAL_PHASE_DURATION = 25; // 开局阶段持续时间（秒）
+	private EntityID initialRefugeTarget = null; // 初始分配的避难所目标
+	private boolean initialTaskCompleted = false; // 初始任务是否完成
+
 	public TestRoadDetector(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager, DevelopData developData)
 	{
 		super(ai, wi, si, moduleManager, developData);
@@ -78,6 +82,27 @@ public class TestRoadDetector extends RoadDetector {
 		logger.debug("priority roads" + priorityRoads);
 		logger.debug("target areas" + targetAreas);
 		logger.debug("opened areas" + openedAreas);
+
+		 // 开局阶段逻辑 - 优先处理分配的避难所
+    if (agentInfo.getTime() < INITIAL_PHASE_DURATION && !initialTaskCompleted) {
+        // 如果还没有分配初始避难所，尝试分配一个
+        if (initialRefugeTarget == null) {
+            initialRefugeTarget = assignInitialRefuge();
+        }
+        
+        // 如果有分配的避难所，优先前往
+        if (initialRefugeTarget != null) {
+            this.pathPlanning.setFrom(agentInfo.getPosition());
+            Collection<EntityID> refugeTarget = new ArrayList<>();
+            refugeTarget.add(initialRefugeTarget);
+            this.pathPlanning.setDestination(refugeTarget);
+            List<EntityID> path = this.pathPlanning.calc().getResult();
+            if (path != null && !path.isEmpty()) {
+                this.result = path.get(path.size() - 1);
+            }
+            return this;
+        }
+    }
 
 		EntityID positionID = this.agentInfo.getPosition();//获取当前位置
 		if (positionID.equals(longTermTarget)) {
@@ -289,6 +314,33 @@ public class TestRoadDetector extends RoadDetector {
 		return this;
 	}
 
+	private EntityID assignInitialRefuge() {
+    // 获取所有避难所
+    Collection<StandardEntity> refuges = worldInfo.getEntitiesOfType(StandardEntityURN.REFUGE);
+    
+    if (refuges.isEmpty()) {
+        return null;
+    }
+    
+    // 使用警察ID的哈希值来选择避难所，确保分配的一致性
+    int policeIdHash = agentInfo.getID().getValue();
+    int refugeIndex = policeIdHash % refuges.size();
+    
+    // 选择对应的避难所
+    int i = 0;
+    for (StandardEntity refuge : refuges) {
+        if (i == refugeIndex) {
+            logger.debug("警察被分配到避难所: " + refuge.getID());
+            return refuge.getID();
+        }
+        i++;
+    }
+    
+    return null;
+}
+
+
+
 	@Override
 	public EntityID getTarget()
 	{
@@ -297,6 +349,14 @@ public class TestRoadDetector extends RoadDetector {
 
 	@Override
 	public RoadDetector updateInfo(MessageManager messageManager) {
+
+	if (initialRefugeTarget != null && !initialTaskCompleted) {
+        // 如果当前位置就是分配的避难所，标记任务完成
+        if (agentInfo.getPosition().equals(initialRefugeTarget)) {
+            initialTaskCompleted = true;
+            logger.debug("警察已完成初始避难所清理任务: " + initialRefugeTarget);
+        }
+    }
 
 		if(agentInfo.getTime()==1)
 		{
