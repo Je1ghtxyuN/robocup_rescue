@@ -17,6 +17,8 @@ import java.util.*;
 import static java.util.stream.Collectors.*;
 import static java.util.Comparator.*;
 
+import SEU.module.algorithm.KmeansVisualizer;
+
 public class SEUKMeansClustering extends StaticClustering {
 
   private Map<EntityID, Integer> assignment = new HashMap<>();
@@ -52,6 +54,15 @@ public class SEUKMeansClustering extends StaticClustering {
       return -1;
     }
     return this.assignment.get(id);
+  }
+
+  /**
+   * 获取当前代理的实体类型URN (StandardEntityURN).
+   * 
+   * @return 代表代理实体类型的StandardEntityURN枚举值
+   */
+  public StandardEntityURN getUrn() {
+      return this.urn;
   }
 
   @Override
@@ -180,7 +191,37 @@ public class SEUKMeansClustering extends StaticClustering {
       pd.setEntityID(this.addSuffixToKey(PD_CLUSTER_A, i), agent);
     }
 
+    // 添加可视化调用
+    visualizeClusteringResults();
+
     return this;
+  }
+
+  /**
+   * 可视化聚类结果
+   */
+  private void visualizeClusteringResults() {
+      try {
+          // 获取与聚类算法相同的实体列表
+          List<StandardEntity> entities = new ArrayList<>(
+              this.worldInfo.getEntitiesOfType(
+                  ROAD, HYDRANT, BUILDING, GAS_STATION,
+                  REFUGE, POLICE_OFFICE, FIRE_STATION, AMBULANCE_CENTRE));
+          
+          // 创建可视化器实例
+          KmeansVisualizer visualizer = new KmeansVisualizer(this, entities);
+          
+          // 启动可视化（会自动显示窗口并保存截图）
+          visualizer.visualize();
+          
+          // 或者分步控制：
+          // visualizer.setVisible(true); // 只显示窗口
+          // 在需要的时候手动保存：visualizer.saveVisualization();
+          
+      } catch (Exception e) {
+          System.err.println("可视化失败: " + e.getMessage());
+          e.printStackTrace();
+      }
   }
 
   @Override
