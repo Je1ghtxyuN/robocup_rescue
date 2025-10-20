@@ -1,5 +1,5 @@
 === SEUHighways Debug 信息 ===
-生成时间: Mon Oct 20 22:28:01 CST 2025
+生成时间: Mon Oct 20 23:29:36 CST 2025
 高速公路总数: 442
 
 采样点数量: 10

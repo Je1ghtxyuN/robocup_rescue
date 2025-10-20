@@ -32,7 +32,7 @@ public class SEUHighways extends StaticClustering {
   private PathPlanning pathplanner;
 
   // 采样点的数量，用于确定要计算路径的关键点数量
-  private static final int SAMPLE_NUMBER = 10;
+  protected static final int SAMPLE_NUMBER = 10;
 
   private static final String MODULE_NAME =
       "SEU.module.algorithm.SEUHighways";
@@ -82,8 +82,52 @@ public class SEUHighways extends StaticClustering {
     
     // 输出Debug信息
     this.debugHighways();
-    
+
+    // 添加this引用检查
+    System.out.println("SEUHighways实例: " + this);
+    System.out.println("高速公路数量: " + this.highways.size());
+
+    // 输出可视化结果
+    visualizeHighways();
+
     return this;
+  }
+
+  public void visualizeHighways() {
+    try {
+        System.out.println("开始高速公路可视化...");
+        
+        // 获取所有实体用于可视化
+        List<StandardEntity> allEntities = new ArrayList<>(
+            this.worldInfo.getEntitiesOfType(
+                BUILDING, GAS_STATION, REFUGE,
+                FIRE_STATION, AMBULANCE_CENTRE, POLICE_OFFICE,
+                ROAD, HYDRANT));
+        
+        System.out.println("获取到的实体数量: " + allEntities.size());
+        System.out.println("高速公路数量: " + this.highways.size());
+        
+        if (allEntities.isEmpty()) {
+            System.err.println("警告: 没有找到可可视化的实体");
+            return;
+        }
+        
+        if (this.highways.isEmpty()) {
+            System.err.println("警告: 高速公路集合为空");
+        }
+        
+        // 修复：传递正确的this引用，而不是null
+        HighwayVisualizer visualizer = new HighwayVisualizer(this, allEntities);
+        System.out.println("可视化器创建成功");
+        
+        // 启动可视化
+        visualizer.visualize();
+        System.out.println("可视化方法调用完成");
+        
+      } catch (Exception e) {
+          System.err.println("可视化高速公路时出错: " + e.getMessage());
+          e.printStackTrace();
+      }
   }
 
   @Override
