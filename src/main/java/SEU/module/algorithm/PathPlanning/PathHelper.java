@@ -203,33 +203,60 @@ public class PathHelper {
     /*
      * 以下代码用于判断智能体是否被阻挡
      */
+    /*
+     * 以下代码用于判断智能体是否被阻挡
+     */
+    /**
+     * 判断智能体是否处于被阻挡状态
+     * 该方法通过分析智能体的移动历史和当前状态来确定其是否被障碍物困住
+     * @return 如果智能体被阻挡，返回true；否则返回false
+     */
     public boolean isBlocked() {
-		if (this.agentInfo.getTime()< 6)
-			return false;
+        // 时间步数小于6时，认为智能体还未开始有效移动，不判定为被阻挡
+        if (this.agentInfo.getTime() < 6)
+            return false;
+
+        // 警察单位不会被判定为被阻挡
         if (this.agentInfo.me() instanceof PoliceForce) {
             return false;
         }
+
+        // 以下代码段被注释：原计划通过isHumanStucked方法判断智能体是否被困在障碍中
         // if (isHumanStucked((Human)this.agentInfo.me())) {
         //     logger.debug("-----被困在障碍中-----");
         //     return false;
         // }
-		if (this.agentInfo.getExecutedAction(agentInfo.getTime()-1).getClass() == ActionMove.class &&
-			this.agentInfo.getExecutedAction(agentInfo.getTime()-2).getClass() == ActionMove.class) {
-			Pair<Integer, Integer> location_1 = locationHistory.get(agentInfo.getTime() - 2);
-			Pair<Integer, Integer> location_2 = locationHistory.get(agentInfo.getTime() - 1);
-			Pair<Integer, Integer> location_3 = locationHistory.get(agentInfo.getTime());
-			if (location_1 == null || location_2 == null || location_3 == null)
-				return false;
-			double distance_1 = getDistance(location_1, location_2);
-			double distance_2 = getDistance(location_2, location_3);
+
+        // 检查最近两步是否都执行了移动动作
+        if (this.agentInfo.getExecutedAction(agentInfo.getTime()-1).getClass() == ActionMove.class &&
+                this.agentInfo.getExecutedAction(agentInfo.getTime()-2).getClass() == ActionMove.class) {
+
+            // 获取最近三个时间点的位置
+            Pair<Integer, Integer> location_1 = locationHistory.get(agentInfo.getTime() - 2);
+            Pair<Integer, Integer> location_2 = locationHistory.get(agentInfo.getTime() - 1);
+            Pair<Integer, Integer> location_3 = locationHistory.get(agentInfo.getTime());
+
+            // 如果任何一个位置为空，不判定为被阻挡
+            if (location_1 == null || location_2 == null || location_3 == null)
+                return false;
+
+            // 计算相邻时间点之间的移动距离
+            double distance_1 = getDistance(location_1, location_2);
+            double distance_2 = getDistance(location_2, location_3);
+
+            // 以下代码段被注释：用于调试时记录移动距离
             // logger.debug("-----moveDistance:" + distance_2 + "-----");
-			if (distance_2 < MinMoveDis) {
-				return true;
-			}
-		}
-		
-		return false;
-	}
+
+            // 如果最近一步的移动距离小于最小移动距离阈值，判定为被阻挡
+            if (distance_2 < MinMoveDis) {
+                return true;
+            }
+        }
+
+        // 未满足被阻挡条件，返回false
+        return false;
+    }
+
     public static double getDistance(Pair<Integer, Integer> pair1, Pair<Integer, Integer> pair2) {
 		int x1 = pair1.first().intValue();
 		int y1 = pair1.second().intValue();

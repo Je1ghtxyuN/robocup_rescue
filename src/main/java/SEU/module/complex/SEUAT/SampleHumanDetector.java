@@ -139,37 +139,59 @@ public class SampleHumanDetector extends HumanDetector {
   }
 
 
-  /*
-   * 全部目标
-   */
-  private List<Human>
-      filterRescueTargets(Collection<? extends StandardEntity> list) {
-    List<Human> rescueTargets = new ArrayList<>();
-    for (StandardEntity next : list) {
-      if (!(next instanceof Human))
-        continue;
-      Human h = (Human) next;
-      if (!isValidHuman(h))
-        continue;
-      if (hasATWait(h))
-        continue;
-      if (wrongCivilians.contains(h)) {
-        continue;
-      }
+    /**
+     * 过滤并筛选需要救援的人类目标
+     * 该方法从一组标准实体中筛选出符合条件的人类目标，用于后续的救援行动规划
+     * @param list 包含标准实体的集合，将从中筛选出需要救援的人类
+     * @return 符合救援条件的人类列表
+     */
+    private List<Human> filterRescueTargets(Collection<? extends StandardEntity> list) {
+        // 创建一个空列表用于存储需要救援的人类目标
+        List<Human> rescueTargets = new ArrayList<>();
 
-      if (hasATinCluster(h))
-        continue;
-      if (!shouldWait(h)) {
-        messageManager.addMessage(new MessageCivilian(false, StandardMessagePriority.HIGH,(Civilian)h));
-        continue;
-      }
+        // 遍历输入的所有实体
+        for (StandardEntity next : list) {
+            // 过滤条件1：实体必须是人类类型
+            if (!(next instanceof Human))
+                continue;
 
+            // 将实体强制转换为人类类型
+            Human h = (Human) next;
 
-      rescueTargets.add(h);
+            // 过滤条件2：必须是有效的人类目标（通过isValidHuman方法验证）
+            if (!isValidHuman(h))
+                continue;
+
+            // 过滤条件3：没有救护队正在等待处理该人类
+            if (hasATWait(h))
+                continue;
+
+            // 过滤条件4：该人类不在错误平民列表中
+            if (wrongCivilians.contains(h)) {
+                continue;
+            }
+
+            // 过滤条件5：该区域集群中没有救护队正在处理
+            if (hasATinCluster(h))
+                continue;
+
+            // 条件判断：如果该人类不需要等待处理
+            if (!shouldWait(h)) {
+                // 创建并发送一条高优先级的平民信息消息
+                // 参数1: false 表示不通过无线电发送
+                // 参数2: StandardMessagePriority.HIGH 表示高优先级
+                // 参数3: 将Human类型转换为Civilian类型的目标对象
+                messageManager.addMessage(new MessageCivilian(false, StandardMessagePriority.HIGH, (Civilian)h));
+                continue;
+            }
+
+            // 所有过滤条件都满足，将该人类添加到救援目标列表
+            rescueTargets.add(h);
+        }
+
+        // 返回筛选后的救援目标列表
+        return rescueTargets;
     }
-
-    return rescueTargets;
-  }
 
   /*
    * 聚类中的目标
