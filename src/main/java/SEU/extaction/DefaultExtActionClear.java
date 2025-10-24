@@ -1896,9 +1896,11 @@ public class DefaultExtActionClear extends ExtAction {
       ModuleManager mm, DevelopData dd) {
     super(ai, wi, si, mm, dd);
 
-    this.stuckedHumans = mm.getModule("SEU.Algorithm.SEUPathPlanning.StuckHumans");
-    this.failedMove   = mm.getModule("SEU.Algorithm.SEUPathPlanning.FailedMove");
-    this.pathPlanning = mm.getModule("DefaultExtActionClear.PathPlanning"); // 保持你已有的
+        this.pathPlanning = mm.getModule("DefaultExtActionClear.PathPlanning");
+
+    this.failedMove = mm.getModule("DefaultExtActionClear.FailedMove");
+
+    this.stuckedHumans = mm.getModule("DefaultExtActionClear.StuckHumans");
 
 
     // @ DEBUG {{{
