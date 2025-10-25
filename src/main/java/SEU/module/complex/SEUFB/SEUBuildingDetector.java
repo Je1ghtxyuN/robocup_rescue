@@ -16,6 +16,8 @@ import adf.core.component.module.algorithm.Clustering;
 import adf.core.component.module.algorithm.PathPlanning;
 import adf.core.component.module.complex.HumanDetector;
 import adf.core.debug.DefaultLogger;
+import SEU.module.complex.common.LifeXpectancy;
+import rescuecore2.misc.Pair;
 
 import java.util.*;
 import adf.core.agent.action.ambulance.*;
