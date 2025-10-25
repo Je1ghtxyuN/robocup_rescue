@@ -36,6 +36,17 @@ public class SEUBuildingDetector extends HumanDetector {
   private Set<Human> badHumans;
   private int lastBuriedness = 0;
 
+    // 从AITFireBrigadeDetector移植的防聚集变量
+  private Set<EntityID> avoidTasks = new HashSet<>();
+  private Set<EntityID> nonTarget = new HashSet<>();
+  private Set<EntityID> rescueCivTask = new HashSet<>();
+  private Set<EntityID> rescueAgentTask = new HashSet<>();
+  
+  // 防聚集计数器
+  private int[] f = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+  final private int FB_COUNTER = f.length;
+  final private int RESCUE_MAX_FB = 3;
+
 
   public SEUBuildingDetector(AgentInfo ai, WorldInfo wi, ScenarioInfo si, ModuleManager moduleManager, DevelopData developData) {
     super(ai, wi, si, moduleManager, developData);
@@ -67,8 +78,18 @@ public class SEUBuildingDetector extends HumanDetector {
       if (messageClass == MessageCivilian.class) {
         updateCivilianMessage((MessageCivilian) message, changedEntities);
       } 
+            // 从AITFireBrigadeDetector移植的消息处理
+      else if (messageClass == MessageFireBrigade.class) {
+        handleMessage((MessageFireBrigade) message);
+      } else if (messageClass == MessageAmbulanceTeam.class) {
+        handleMessage((MessageAmbulanceTeam) message);
+      } else if (messageClass == MessagePoliceForce.class) {
+        handleMessage((MessagePoliceForce) message);
+      }
     }
     this.messageManager = messageManager;
+
+    updateTask();
     return this;
   }
 
@@ -93,43 +114,311 @@ public class SEUBuildingDetector extends HumanDetector {
     }
   }
 
-  @Override
+   @Override
   public HumanDetector calc() {
+    // 从AITFireBrigadeDetector移植的防聚集逻辑：更新FB数量统计
+    int n = 0;
+    Collection<StandardEntity> FBs = this.worldInfo.getEntitiesOfType(FIRE_BRIGADE);
+    for (StandardEntity entity : FBs) {
+        if (entity instanceof FireBrigade) {
+            n++;
+        }
+    }
+    final int idx = this.agentInfo.getTime() % FB_COUNTER;
+    this.f[idx] = n;
 
     EntityID agentPosition = this.agentInfo.getPosition();
-    for(StandardEntity standardEntity : this.worldInfo.getEntitiesOfType(CIVILIAN)) {
-      if (isValidHuman(standardEntity)) {
-        Human h = (Human) standardEntity;
-        if (!(badHumans.contains(h))) {
-          if (agentPosition.equals(h.getPosition()) || (Rescuing(h)&&near(agentPosition, h.getPosition()))) {
-            if (h.getBuriedness()>0) {
-              this.result = h.getID();
-              logger.debug("----- can rescue human: " + this.result);
-              return this;
-            }
-          }
-        }
-      }
-    }
     
-    Random random = new Random();
-
-    if(this.result!=null&&isblocked()&&random.nextInt(10)>6){
-      this.blacklist.add((Human) this.worldInfo.getEntity(this.result));
+    // 从AITFireBrigadeDetector移植：按位置分组处理目标
+    Map<EntityID, Set<EntityID>> civPos = new HashMap<>();
+    Map<EntityID, Set<EntityID>> ambPos = new HashMap<>();
+    Map<EntityID, Set<EntityID>> fbPos = new HashMap<>();
+    
+    // 填充位置分组数据
+    for (StandardEntity entity : this.worldInfo.getEntitiesOfType(CIVILIAN, POLICE_FORCE, AMBULANCE_TEAM, FIRE_BRIGADE)) {
+        if (!(entity instanceof Human)) continue;
+        
+        Human human = (Human) entity;
+        if (!isValidHuman(human)) continue;
+        if (badHumans.contains(human)) continue;
+        
+        EntityID positionID = human.getPosition();
+        StandardEntityURN urn = human.getStandardURN();
+        
+        if (rescueTarget(human.getID())) {
+            if (urn == CIVILIAN) {
+                civPos.computeIfAbsent(positionID, k -> new HashSet<>()).add(human.getID());
+            } else if (urn == AMBULANCE_TEAM) {
+                ambPos.computeIfAbsent(positionID, k -> new HashSet<>()).add(human.getID());
+            } else if (urn == FIRE_BRIGADE) {
+                fbPos.computeIfAbsent(positionID, k -> new HashSet<>()).add(human.getID());
+            }
+        }
     }
 
-    if(this.result!=null&&tooMuchFB()&&random.nextInt(10)>6){
-
-      this.blacklist.add((Human) this.worldInfo.getEntity(this.result));
-
+    // 优先处理当前位置的目标（从AITFireBrigadeDetector移植）
+    Set<EntityID> targetsAtMyPosition = civPos.get(agentPosition);
+    if (targetsAtMyPosition != null) {
+        Set<EntityID> FBsAtPosition = fbPos.get(agentPosition);
+        int cnt = 0;
+        for (EntityID e : idSort(targetsAtMyPosition)) {
+            if (joinRescue(FBsAtPosition, cnt, e)) {
+                this.result = e;
+                logger.debug("----- can rescue human at my position: " + this.result);
+                return this;
+            } else {
+                this.nonTarget.add(e);
+            }
+            cnt++;
+        }
+        civPos.remove(agentPosition);
     }
-    this.result = calcTarget();
+
+    // 处理其他位置的目标（从AITFireBrigadeDetector移植）
+    for (Map.Entry<EntityID, Set<EntityID>> es : civPos.entrySet()) {
+        Set<EntityID> FBsAtPosition = fbPos.get(es.getKey());
+        final int FBnum = (FBsAtPosition == null) ? 1 : FBsAtPosition.size() + 1;
+        int cnt = 0;
+        for (EntityID e : idSort(es.getValue())) {
+            if (this.avoidTasks.contains(e)) {
+                continue;
+            }
+            if (canSave(e, Math.max(FBnum, getMaxFBcounter()))) {
+                if (joinRescue(FBsAtPosition, cnt)) {
+                    this.result = e;
+                    return this;
+                } else {
+                    this.avoidTasks.add(e);
+                }
+                cnt++;
+            }
+        }
+    }
+
+    // 如果没有找到目标，从通信任务中选择（从AITFireBrigadeDetector移植）
+    if (this.result == null) {
+        this.result = selectReceiveTask();
+    }
 
     refreshInfo();
     return this;
-
   }
 
+  // 从AITFireBrigadeDetector移植的方法
+  private boolean rescueTarget(EntityID e) {
+    if (e == null) {
+      return false;
+    }
+    final Human h = (Human) this.worldInfo.getEntity(e);
+    final int hp = h.getHP();
+    final int buried = h.getBuriedness();
+    return (hp > 0 && buried > 0);
+  }
+
+  private Set<EntityID> idSort(Set<EntityID> list) {
+    if (list == null) {
+      return null;
+    }
+    if (list.isEmpty()) {
+      return null;
+    }
+    int[] ids = new int[list.size()];
+    int idx = 0;
+    for (EntityID e : list) {
+      ids[idx++] = e.getValue();
+    }
+    Arrays.sort(ids);
+    Set<EntityID> ret = new HashSet<>();
+    for (int i : ids) {
+      ret.add(new EntityID(i));
+    }
+    return ret;
+  }
+
+  private boolean joinRescue(Set<EntityID> list, int n) {
+    if (list == null) {
+      return true;
+    }
+    list.add(this.agentInfo.getID());
+    final int max = Math.min(list.size(), getMaxRescueNumber() + getMaxRescueNumber() * n);
+    int[] ids = new int[list.size()];
+    int idx = 0;
+    for (EntityID e : list) {
+      ids[idx++] = e.getValue();
+    }
+    Arrays.sort(ids);
+    final int myID = this.agentInfo.getID().getValue();
+    for (int i = 0; i < max; ++i) {
+      if (ids[i] == myID) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private boolean joinRescue(Set<EntityID> list, int n, EntityID id) {
+    if (list == null) {
+      return true;
+    }
+    list.add(this.agentInfo.getID());
+    final int needNum = getMaxRescueNumber(id) + getMaxRescueNumber(id) * n;
+    final int max = Math.min(list.size(), needNum);
+    int[] ids = new int[list.size()];
+    int idx = 0;
+    for (EntityID e : list) {
+      ids[idx++] = e.getValue();
+    }
+    Arrays.sort(ids);
+    final int myID = this.agentInfo.getID().getValue();
+    for (int i = 0; i < max; ++i) {
+      if (ids[i] == myID) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private int getMaxRescueNumber() {
+    return RESCUE_MAX_FB + (int) (this.agentInfo.getTime() * 0.01);
+  }
+
+  private int getMaxRescueNumber(EntityID id) {
+    return getNeedFBnum(id) + (int) (this.agentInfo.getTime() * 0.01);
+  }
+
+  private int getNeedFBnum(EntityID id) {
+    LifeXpectancy lx = new LifeXpectancy((Human) this.worldInfo.getEntity(id));
+    final int b = ((Human) this.worldInfo.getEntity(id)).getBuriedness();
+    final int l = lx.getLifeXpectancy();
+    int f = 1;
+    while (l - b / f <= 0) {
+      ++f;
+    }
+    return f + 1;
+  }
+
+  private boolean canSave(EntityID id, int n) {
+    final StandardEntity s = this.worldInfo.getEntity(id);
+    if (((Human) s).getBuriedness() == 0 || ((Human) s).getHP() == 0) {
+      return false;
+    }
+    if (((Civilian) s).getBuriedness() > 0 && ((Civilian) s).getHP() > 0) {
+      final LifeXpectancy lx = new LifeXpectancy((Human) s);
+      final int ttl = lx.getLifeXpectancy();
+      return (ttl - rescueTime(id, n) > 0);
+    } else {
+      return true;
+    }
+  }
+
+  private int rescueTime(EntityID id, int n) {
+    return ((Human) this.worldInfo.getEntity(id)).getBuriedness() / n;
+  }
+
+  private int getMaxFBcounter() {
+    int max = 0;
+    for (int i : this.f) {
+      if (i > max) {
+        max = i;
+      }
+    }
+    return max;
+  }
+
+  private void handleMessage(MessageFireBrigade msg) {
+    final EntityID targetID = msg.getAgentID();
+    if(msg.getAction() != 5) return; // HELP_BURIED
+    if (rescueTarget(targetID)) {
+      rescueAgentTask.add(targetID);
+      nonTarget.add(targetID);
+    } else {
+      rescueAgentTask.remove(targetID);
+    }
+  }
+
+  private void handleMessage(MessageAmbulanceTeam msg) {
+    final EntityID targetID = msg.getAgentID();
+    if(msg.getAction() != 5) return; // HELP_BURIED
+    if (rescueTarget(targetID)) {
+      rescueAgentTask.add(targetID);
+      nonTarget.add(targetID);
+    } else {
+      rescueAgentTask.remove(targetID);
+    }
+  }
+
+  private void handleMessage(MessagePoliceForce msg) {
+    final EntityID targetID = msg.getAgentID();
+    if(msg.getAction() != 5) return; // HELP_BURIED
+    if (rescueTarget(targetID)) {
+      rescueAgentTask.add(targetID);
+      nonTarget.add(targetID);
+    } else {
+      rescueAgentTask.remove(targetID);
+    }
+  }
+
+  private void updateTask() {
+    Iterator<EntityID> i = rescueCivTask.iterator();
+    while (i.hasNext()) {
+      final EntityID e = i.next();
+      if (!rescueTarget(e)) {
+        nonTarget.add(e);
+        i.remove();
+      }
+    }
+    i = rescueAgentTask.iterator();
+    while (i.hasNext()) {
+      final EntityID e = i.next();
+      if (!rescueTarget(e)) {
+        nonTarget.add(e);
+        i.remove();
+      }
+    }
+    rescueCivTask.removeAll(avoidTasks);
+    rescueCivTask.removeAll(nonTarget);
+    rescueAgentTask.removeAll(nonTarget);
+    i = avoidTasks.iterator();
+    while (i.hasNext()) {
+      final EntityID e = i.next();
+      if (!rescueTarget(e)) {
+        nonTarget.add(e);
+        i.remove();
+      }
+    }
+    if (rescueAgentTask.isEmpty()) {
+      avoidTasks.clear();
+    }
+  }
+
+  private EntityID selectReceiveTask() {
+    if (!rescueAgentTask.isEmpty()) {
+      return getPriorityTask(rescueAgentTask);
+    }
+    if (!rescueCivTask.isEmpty()) {
+      return getPriorityTask(rescueCivTask);
+    }
+    return null;
+  }
+
+  private EntityID getPriorityTask(Set<EntityID> tasks) {
+    EntityID ret = null;
+    double priority = Double.MAX_VALUE;
+    for (EntityID e : tasks) {
+      final Human h = (Human) this.worldInfo.getEntity(e);
+      final Pair<Integer, Integer> p = this.worldInfo.getLocation(e);
+      final double distance = Math.abs(this.agentInfo.getX() - p.first()) + Math.abs(this.agentInfo.getY() - p.second());
+      final double cost1 = Math.sqrt(distance);
+      final LifeXpectancy lx = new LifeXpectancy(h);
+      final double cost2 = lx.getLifeXpectancy() - (h.getDamage() * h.getBuriedness());
+      final double cost = cost1 + cost2;
+      if (priority > cost) {
+        priority = cost;
+        ret = e;
+      }
+    }
+    return ret;
+  }
 
   private EntityID calcTarget() {
 
