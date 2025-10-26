@@ -24,6 +24,8 @@ import java.util.stream.*;
 
 import static java.util.stream.Collectors.*;
 import static java.util.Comparator.*;
+import SEU.module.comm.RectArea;
+
 
 public class DefaultExtActionClear extends ExtAction {
 
@@ -187,44 +189,47 @@ public class DefaultExtActionClear extends ExtAction {
   @Override
   public ExtAction calc() {
     this.result = null;
-
     int time = this.agentInfo.getTime();
     EntityID myId = this.agentInfo.getID();
+    //1
     if (this.target == null) {
       // System.out.println("[ACTION] " + myId + " " + time + " target is null");
       return this;
     }
-
+    //2
     if (this.cache.containsKey(this.target)) {
       this.result = this.cache.get(this.target);
       return this;
     }
 
     final EntityID position = this.agentInfo.getPosition();
+    //3
     if (this.needToShrink) {
       this.result = this.makeActionToClear(position);
       this.cache.put(this.target, this.result);
       // this.debug.showAction(this.result, time, this.target.toString() + ", 2");
       return this;
     }
-
+    //4
     if (this.needToEscape) {
       this.result = this.makeActionToAvoidError();
       this.cache.put(this.target, this.result);
       // this.debug.showAction(this.result, time, this.target.toString() + ", 3");
       return this;
     }
-
+    //5
     //this.debug.showAction(this.result, time, this.target.toString() + ", 4");
     if (this.needIdle()) {
       return this;
     }
+    //6
     if (this.needRest()) {
       final EntityID refuge = this.seekBestRefuge();
       if (refuge != null) {
         this.target = refuge;
       }
     }
+    //7
     // this.debug.showAction(this.result, time, this.target.toString() + ", 5");
     if (this.target == null) {
       return this;
@@ -670,25 +675,25 @@ public class DefaultExtActionClear extends ExtAction {
    * @param clearline 要清除的范围（直线）
    * @return 若目标在可清除范围内则执行清除，否则执行移动
    */
-  private Action makeActionToClear(List<EntityID> path, Line2D clearline) {
-    final Point2D op = clearline.getOrigin();
-    final Point2D ep = clearline.getEndPoint();
+  // private Action makeActionToClear(List<EntityID> path, Line2D clearline) {
+  //   final Point2D op = clearline.getOrigin();
+  //   final Point2D ep = clearline.getEndPoint();
 
-    final double d = GeometryTools2D.getDistance(this.getPoint(), op);
+  //   final double d = GeometryTools2D.getDistance(this.getPoint(), op);
 
-    final Vector2D vec = clearline.getDirection();
-    final int max = this.scenarioInfo.getClearRepairDistance();
-    final Vector2D extvec = vec.normalised().scale(max);
-    final Action clear = new ActionClear(this.agentInfo, extvec);
-    if (d <= AGENT_RADIUS) {
-      return clear;
-    }
+  //   final Vector2D vec = clearline.getDirection();
+  //   final int max = this.scenarioInfo.getClearRepairDistance();
+  //   final Vector2D extvec = vec.normalised().scale(max);
+  //   final Action clear = new ActionClear(this.agentInfo, extvec);
+  //   if (d <= AGENT_RADIUS) {
+  //     return clear;
+  //   }
 
-    final int x = (int) op.getX();
-    final int y = (int) op.getY();
-    final Action move = new ActionMove(path, x, y);
-    return move;
-  }
+  //   final int x = (int) op.getX();
+  //   final int y = (int) op.getY();
+  //   final Action move = new ActionMove(path, x, y);
+  //   return move;
+  // }
 
 
   /**
@@ -935,5 +940,129 @@ public class DefaultExtActionClear extends ExtAction {
     return this.stuckedHumans.getClusterIndex(me) >= 0;
   }
 
+private RectArea getClearRectangle(Line2D clearline) {
+  // 使用已有方法获取中点（避免使用不存在的 getLocation）
+  final Point2D center = computeMiddlePoint(clearline);
+
+  // 矩形沿线方向的长度（沿向前距离）
+  final double length = (double) this.scenarioInfo.getClearRepairDistance();
+
+  // 横向宽度（以 agent 半径为基准）
+  final double width = AGENT_RADIUS * 2.0;
+
+  // 方向角：使用清理线的方向（Vector2D）
+  final Vector2D dir = clearline.getDirection();
+  final double angle = Math.atan2(dir.getY(), dir.getX());
+
+  // RectArea 的构造是 (Point2D center, double width, double height, double angle)
+  // 这里把 length 作为矩形的 width(沿向方向)，height 作为横向宽度
+  return new RectArea(center, length, width, angle);
+}
+
+
+// private int countBlocksInRect(RectArea rect) {
+//     int count = 0;
+//     ChangeSet changes = this.worldInfo.getChanged();
+//     if (changes == null) return 0;
+
+//     for (EntityID id : changes.getChangedEntities()) {
+//         StandardEntity e = this.worldInfo.getEntity(id);
+//         if (e instanceof Blockade) {
+//             Blockade b = (Blockade) e;
+//             Point2D pos = new Point2D(b.getX(), b.getY());
+//             if (rect.contains(pos)) {
+//                 count++;
+//             }
+//         }
+//     }
+//     return count;
+// }
+/**
+ * 统计矩形区域中（近似/较精确）包含的瓦砾数量。
+ * 方法：遍历 world 中的所有 Blockade（通过 worldInfo.getEntityIDsOfType(BLOCKADE)），
+ * 对每个 block 的 apex 顶点（vertex）做点-in-rect 测试，若任一顶点在矩形内则计数。
+ * （这样比仅用 blockade.getX/getY 更可靠一些）
+ */
+private int countBlocksInRect(RectArea rect) {
+  int count = 0;
+  final Collection<EntityID> blockadeIDs = this.worldInfo.getEntityIDsOfType(BLOCKADE);
+  if (blockadeIDs == null || blockadeIDs.isEmpty()) return 0;
+
+  for (EntityID bid : blockadeIDs) {
+    final StandardEntity ent = this.worldInfo.getEntity(bid);
+    if (!(ent instanceof Blockade)) continue;
+    final Blockade b = (Blockade) ent;
+
+    // 获取瓦砾顶点数组 -> 转为 Point2D 列表
+    final int[] apexes = b.getApexes();
+    boolean intersects = false;
+    if (apexes != null) {
+      final List<Point2D> pts = GeometryTools2D.vertexArrayToPoints(apexes);
+      for (Point2D p : pts) {
+        if (rect.contains(p)) {
+          intersects = true;
+          break;
+        }
+      }
+    } else {
+      // 作为后备，使用 blockade 的中心坐标（如果实现提供）
+      Point2D center = new Point2D(b.getX(), b.getY());
+      if (rect.contains(center)) intersects = true;
+    }
+
+    if (intersects) count++;
+  }
+  return count;
+}
+
+
+// private Action makeActionToClear(List<EntityID> path, Line2D clearline) {
+//     Point2D origin = clearline.getOrigin();
+//     RectArea rect = getClearRectangle(origin);
+//     int blockCount = countBlocksInRect(rect);
+//     int clearRate = this.scenarioInfo.getClearRepairRate();
+
+//     if (blockCount >= clearRate) {
+//         // ✅ 执行矩形清理
+//         Vector2D vec = clearline.getDirection().normalised()
+//                         .scale(this.scenarioInfo.getClearRepairDistance());
+//         return new ActionClear(this.agentInfo, vec);
+//     } else {
+//         // 🚶 否则移动过去
+//         int x = (int) origin.getX();
+//         int y = (int) origin.getY();
+//         return new ActionMove(path, x, y);
+//     }
+// }
+/**
+ * 基于矩形清理逻辑的 makeActionToClear（修正版本）。
+ * - clearline 的 origin/endpoint 都是 Point2D（坐标），不是 EntityID。
+ * - 先构造矩形 rect，统计 rect 内 blockCount，再按条件决定清除或移动。
+ */
+private Action makeActionToClear(List<EntityID> path, Line2D clearline) {
+  final Point2D op = clearline.getOrigin();   // 线段起点（坐标）
+  final Point2D ep = clearline.getEndPoint(); // 线段终点（坐标）
+  final Point2D myPos = this.getPoint();      // 使用类中已有方法获取 agent 坐标
+
+  final RectArea rect = getClearRectangle(clearline);
+  final int blockCount = countBlocksInRect(rect);
+  final int clearRate = this.scenarioInfo.getClearRepairRate();
+
+  // 判断 agent 是否已在矩形内
+  final boolean agentInRect = rect.contains(myPos);
+
+  // 决策：若矩形内瓦砾数量达到阈值或 agent 已在矩形内 -> 原地清理
+  if (blockCount >= clearRate || agentInRect) {
+    final Vector2D vec = clearline.getDirection().normalised()
+        .scale(this.scenarioInfo.getClearRepairDistance());
+    return new ActionClear(this.agentInfo, vec);
+  }
+
+  // 否则向清理线的起点移动（也可以改为移动到线段上最近点）
+  // 这里移动到 line 的起点 op（整数坐标）
+  final int x = (int) op.getX();
+  final int y = (int) op.getY();
+  return new ActionMove(path, x, y);
+}
 
 }
