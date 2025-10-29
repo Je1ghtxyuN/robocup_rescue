@@ -25,7 +25,7 @@ $ ./gradlew build
 
 `adf-sample-agent-java` 是基于 ADF 核心 (`adf-core-java`) 的 RCRS (`rcrs-server`) 示例团队实现。
 
-运行 `adf-sample-agent-java` 前，需要先启动 `rcrs-server`（下载、编译和运行 `rcrs-server` 的说明请参考：<链接1>）。
+运行 `adf-sample-agent-java` 前，需要先启动 `rcrs-server`。
 
 启动 `rcrs-server` 后，打开新的终端窗口并执行：
 
